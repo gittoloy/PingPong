@@ -1,0 +1,95 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+out/
+dist/
+dist-electron/
+.qoder/
+
+# Electron packaging
+release/
+build/
+*.exe
+*.dmg
+*.AppImage
+*.snap
+*.deb
+*.rpm
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Vite cache
+.vite/
+
+# IDE and editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.sublime-workspace
+*.sublime-project
+
+# System files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.lnk
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Cache directories
+.cache/
+.eslintcache
+.stylelintcache
+
+# Local database files (if any)
+*.db
+*.sqlite
+*.sqlite3
+
+# OS generated files
+ehthumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Yarn
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
