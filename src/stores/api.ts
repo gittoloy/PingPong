@@ -40,6 +40,7 @@ export const useApiStore = defineStore('api', () => {
   const loading = ref(false)
   const expandedKeys = ref<(number | string)[]>([])
   const selectedNode = ref<TreeNode | null>(null)
+  const selectedApiId = ref<number | null>(null)
 
   const treeData = computed(() => {
     const buildTree = (parentId: number | null = null): TreeNode[] => {
@@ -163,6 +164,26 @@ export const useApiStore = defineStore('api', () => {
     }
   }
 
+  async function reorderGroups(orders: { id: number; sort_order: number; parent_id: number | null }[]) {
+    try {
+      await window.electronAPI.reorderApiGroups(orders)
+      await loadGroups()
+    } catch (err) {
+      console.error('Failed to reorder groups:', err)
+      throw err
+    }
+  }
+
+  async function reorderApis(orders: { id: number; sort_order: number; group_id: number | null }[]) {
+    try {
+      await window.electronAPI.reorderApis(orders)
+      await loadApis()
+    } catch (err) {
+      console.error('Failed to reorder apis:', err)
+      throw err
+    }
+  }
+
   function toggleExpand(key: number | string) {
     const index = expandedKeys.value.indexOf(key)
     if (index > -1) {
@@ -176,6 +197,14 @@ export const useApiStore = defineStore('api', () => {
     selectedNode.value = node
   }
 
+  function setSelectedApiId(id: number | null) {
+    selectedApiId.value = id
+  }
+
+  function findApiByUrl(url: string): ApiItem | null {
+    return apis.value.find(api => api.url === url) || null
+  }
+
   return {
     groups,
     apis,
@@ -183,6 +212,7 @@ export const useApiStore = defineStore('api', () => {
     treeData,
     expandedKeys,
     selectedNode,
+    selectedApiId,
     loadGroups,
     loadApis,
     loadAll,
@@ -192,7 +222,11 @@ export const useApiStore = defineStore('api', () => {
     createApi,
     updateApi,
     deleteApi,
+    reorderGroups,
+    reorderApis,
     toggleExpand,
-    selectNode
+    selectNode,
+    setSelectedApiId,
+    findApiByUrl
   }
 })

@@ -70,6 +70,9 @@ export interface ElectronAPI {
   createApi: (api: ApiItem) => Promise<number>
   updateApi: (api: ApiItem) => Promise<boolean>
   deleteApi: (id: number) => Promise<boolean>
+  
+  reorderApiGroups: (orders: { id: number; sort_order: number; parent_id: number | null }[]) => Promise<boolean>
+  reorderApis: (orders: { id: number; sort_order: number; group_id: number | null }[]) => Promise<boolean>
 }
 
 const api: ElectronAPI = {
@@ -107,7 +110,10 @@ const api: ElectronAPI = {
   getApi: (id) => ipcRenderer.invoke('api:get', id),
   createApi: (api) => ipcRenderer.invoke('api:create', api),
   updateApi: (api) => ipcRenderer.invoke('api:update', api),
-  deleteApi: (id) => ipcRenderer.invoke('api:delete', id)
+  deleteApi: (id) => ipcRenderer.invoke('api:delete', id),
+  
+  reorderApiGroups: (orders) => ipcRenderer.invoke('apiGroup:reorder', orders),
+  reorderApis: (orders) => ipcRenderer.invoke('api:reorder', orders)
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

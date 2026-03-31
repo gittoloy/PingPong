@@ -241,6 +241,20 @@ export function registerDatabaseHandlers(): void {
     execute('DELETE FROM apis WHERE id = ?', [id])
     return true
   })
+
+  ipcMain.handle('apiGroup:reorder', async (_event, orders: { id: number; sort_order: number; parent_id: number | null }[]) => {
+    for (const item of orders) {
+      execute('UPDATE api_groups SET sort_order = ?, parent_id = ? WHERE id = ?', [item.sort_order, item.parent_id, item.id])
+    }
+    return true
+  })
+
+  ipcMain.handle('api:reorder', async (_event, orders: { id: number; sort_order: number; group_id: number | null }[]) => {
+    for (const item of orders) {
+      execute('UPDATE apis SET sort_order = ?, group_id = ? WHERE id = ?', [item.sort_order, item.group_id, item.id])
+    }
+    return true
+  })
 }
 
 export interface ApiItem {

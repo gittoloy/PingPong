@@ -321,11 +321,24 @@ function formatXml() {
   display: flex;
   flex-direction: column;
   padding: 0 16px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.response-tabs :deep(.el-tabs__header) {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.response-tabs :deep(.el-tabs__nav-wrap) {
+  padding: 0;
 }
 
 .response-tabs :deep(.el-tabs__content) {
   flex: 1;
   overflow: hidden;
+  min-height: 0;
+  padding: 16px 0;
 }
 
 .response-tabs :deep(.el-tab-pane) {

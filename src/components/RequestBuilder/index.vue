@@ -27,55 +27,67 @@
       >
         Send
       </el-button>
+      <el-button 
+        type="success" 
+        @click="saveApi"
+        size="large"
+      >
+        <el-icon><FolderAdd /></el-icon>
+        Save
+      </el-button>
     </div>
     
     <el-tabs v-model="activeTab" class="request-tabs">
       <el-tab-pane label="Params" name="params">
-        <KeyValueEditor 
-          v-model="requestStore.queryParams" 
-          @add="requestStore.addQueryParam"
-          @remove="requestStore.removeQueryParam"
-        />
+        <div class="tab-content">
+          <KeyValueEditor 
+            v-model="requestStore.queryParams" 
+            @add="requestStore.addQueryParam"
+            @remove="requestStore.removeQueryParam"
+          />
+        </div>
       </el-tab-pane>
       
       <el-tab-pane label="Headers" name="headers">
-        <HeaderEditor 
-          v-model="requestStore.headers"
-          @add="requestStore.addHeader"
-          @remove="requestStore.removeHeader"
-        />
+        <div class="tab-content">
+          <HeaderEditor 
+            v-model="requestStore.headers"
+            @add="requestStore.addHeader"
+            @remove="requestStore.removeHeader"
+          />
+        </div>
       </el-tab-pane>
       
       <el-tab-pane label="Body" name="body">
-        <div class="body-type-selector">
-          <el-radio-group v-model="requestStore.bodyType" size="small">
-            <el-radio-button label="none">None</el-radio-button>
-            <el-radio-button label="json">JSON</el-radio-button>
-            <el-radio-button label="form-data">Form Data</el-radio-button>
-            <el-radio-button label="raw">Raw</el-radio-button>
-          </el-radio-group>
-        </div>
-        <div v-if="requestStore.bodyType !== 'none'" class="body-editor">
-          <el-input
-            v-model="requestStore.body"
-            type="textarea"
-            :rows="8"
-            :placeholder="bodyPlaceholder"
-            resize="none"
-          />
-          <el-button 
-            v-if="requestStore.bodyType === 'json'" 
-            size="small" 
-            @click="formatJson"
-            style="margin-top: 8px;"
-          >
-            Format JSON
-          </el-button>
+        <div class="tab-content">
+          <div class="body-type-selector">
+            <el-radio-group v-model="requestStore.bodyType" size="small">
+              <el-radio-button label="none">None</el-radio-button>
+              <el-radio-button label="json">JSON</el-radio-button>
+              <el-radio-button label="form-data">Form Data</el-radio-button>
+              <el-radio-button label="raw">Raw</el-radio-button>
+            </el-radio-group>
+          </div>
+          <div v-if="requestStore.bodyType !== 'none'" class="body-editor">
+            <JsonEditor
+              v-if="requestStore.bodyType === 'json'"
+              v-model="requestStore.body"
+              :placeholder="bodyPlaceholder"
+            />
+            <el-input
+              v-else
+              v-model="requestStore.body"
+              type="textarea"
+              :rows="8"
+              :placeholder="bodyPlaceholder"
+              resize="none"
+            />
+          </div>
         </div>
       </el-tab-pane>
       
       <el-tab-pane label="History" name="history">
-        <div class="history-tab">
+        <div class="tab-content history-tab">
           <el-table :data="requestStore.displayedHistory" size="small" stripe max-height="300">
             <el-table-column prop="method" label="方法" width="80">
               <template #default="{ row }">
@@ -141,17 +153,20 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Link, Document } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { Link, Document, FolderAdd } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRequestStore } from '@/stores/request'
 import { useEnvironmentStore } from '@/stores/environment'
+import { useApiStore, type ApiItem } from '@/stores/api'
 import KeyValueEditor from './KeyValueEditor.vue'
 import HeaderEditor from './HeaderEditor.vue'
 import RequestDetailDialog from './RequestDetailDialog.vue'
+import JsonEditor from './JsonEditor.vue'
 import type { HttpMethod, RequestRecord } from '@/types'
 
 const requestStore = useRequestStore()
 const environmentStore = useEnvironmentStore()
+const apiStore = useApiStore()
 
 const methods: HttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD']
 const activeTab = ref('params')
@@ -205,15 +220,6 @@ async function sendRequest() {
   }
 }
 
-function formatJson() {
-  try {
-    const parsed = JSON.parse(requestStore.body)
-    requestStore.body = JSON.stringify(parsed, null, 2)
-  } catch {
-    ElMessage.error('Invalid JSON format')
-  }
-}
-
 function getStatusClass(status: number): string {
   if (status >= 200 && status < 300) return 'status-2xx'
   if (status >= 300 && status < 400) return 'status-3xx'
@@ -263,17 +269,160 @@ function getDisplayUrl(url: string): string {
 function loadMore() {
   requestStore.loadMoreHistory()
 }
+
+function normalizeUrl(url: string): string {
+  if (!url) return ''
+  let normalized = url.trim()
+  if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+    normalized = normalized.startsWith('/') ? normalized : '/' + normalized
+  }
+  return normalized
+}
+
+function urlsMatch(url1: string, url2: string): boolean {
+  const norm1 = normalizeUrl(url1)
+  const norm2 = normalizeUrl(url2)
+  return norm1 === norm2
+}
+
+function validateApiData(data: ApiItem): { valid: boolean; message: string } {
+  if (!data.url || data.url.trim() === '') {
+    return { valid: false, message: 'URL不能为空' }
+  }
+  
+  if (!data.method) {
+    return { valid: false, message: '请求方法不能为空' }
+  }
+  
+  if (data.headers) {
+    try {
+      const parsed = JSON.parse(data.headers)
+      if (!Array.isArray(parsed)) {
+        return { valid: false, message: '请求头数据格式错误' }
+      }
+    } catch {
+      return { valid: false, message: '请求头JSON解析失败' }
+    }
+  }
+  
+  if (data.query_params) {
+    try {
+      const parsed = JSON.parse(data.query_params)
+      if (!Array.isArray(parsed)) {
+        return { valid: false, message: '查询参数数据格式错误' }
+      }
+    } catch {
+      return { valid: false, message: '查询参数JSON解析失败' }
+    }
+  }
+  
+  if (data.body_type === 'json' && data.body) {
+    try {
+      JSON.parse(data.body)
+    } catch {
+      return { valid: false, message: '请求体JSON格式错误' }
+    }
+  }
+  
+  return { valid: true, message: '' }
+}
+
+async function saveApi() {
+  if (!requestStore.url) {
+    ElMessage.warning('请输入URL')
+    return
+  }
+  
+  const currentUrl = requestStore.url.trim()
+  const selectedApi = apiStore.apis.find(api => api.id === apiStore.selectedApiId)
+  
+  const filteredHeaders = requestStore.headers.filter(h => h.key && h.key.trim() !== '')
+  const filteredParams = requestStore.queryParams.filter(p => p.key && p.key.trim() !== '')
+  
+  const apiData: ApiItem = {
+    name: '',
+    method: requestStore.method,
+    url: currentUrl,
+    headers: JSON.stringify(filteredHeaders),
+    query_params: JSON.stringify(filteredParams),
+    body: requestStore.body,
+    body_type: requestStore.bodyType,
+    group_id: null
+  }
+  
+  if (selectedApi && selectedApi.name && selectedApi.name.trim() !== '') {
+    apiData.name = selectedApi.name
+  } else {
+    apiData.name = extractApiName(currentUrl)
+  }
+  
+  const validation = validateApiData(apiData)
+  if (!validation.valid) {
+    ElMessage.error(validation.message)
+    return
+  }
+  
+  const shouldUpdate = selectedApi && urlsMatch(selectedApi.url, currentUrl)
+  
+  if (shouldUpdate) {
+    try {
+      apiData.id = selectedApi!.id
+      apiData.group_id = selectedApi!.group_id
+      apiData.description = selectedApi!.description
+      await apiStore.updateApi(apiData)
+      ElMessage.success('API配置已更新')
+    } catch (err: any) {
+      console.error('Save API error:', err)
+      ElMessage.error('保存失败: ' + (err.message || '未知错误'))
+    }
+  } else {
+    try {
+      const newApiId = await apiStore.createApi(apiData)
+      apiStore.setSelectedApiId(newApiId)
+      ElMessage.success('已保存为新的临时API')
+    } catch (err: any) {
+      console.error('Create API error:', err)
+      ElMessage.error('保存失败: ' + (err.message || '未知错误'))
+    }
+  }
+}
+
+function extractApiName(url: string): string {
+  try {
+    let cleanUrl = url.trim()
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = 'http://placeholder' + (cleanUrl.startsWith('/') ? '' : '/') + cleanUrl
+    }
+    
+    const urlObj = new URL(cleanUrl)
+    const pathParts = urlObj.pathname.split('/').filter(Boolean)
+    
+    if (pathParts.length > 0) {
+      const lastPart = pathParts[pathParts.length - 1]
+      return lastPart.substring(0, 50)
+    }
+    
+    const host = urlObj.host.replace(/^www\./, '')
+    return host.substring(0, 50)
+  } catch {
+    return url.trim().substring(0, 50) || 'Untitled API'
+  }
+}
 </script>
 
 <style scoped>
 .request-builder-container {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .url-bar {
   display: flex;
   gap: 8px;
   margin-bottom: 16px;
+  flex-shrink: 0;
 }
 
 .method-select {
@@ -303,12 +452,47 @@ function loadMore() {
   white-space: nowrap;
 }
 
+.request-tabs {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.request-tabs :deep(.el-tabs__header) {
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+
+.request-tabs :deep(.el-tabs__content) {
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+}
+
+.request-tabs :deep(.el-tab-pane) {
+  height: 100%;
+}
+
+.tab-content {
+  height: 100%;
+  overflow: hidden;
+  padding: 12px 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .body-type-selector {
   margin-bottom: 12px;
+  flex-shrink: 0;
 }
 
 .body-editor {
   margin-top: 8px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .body-editor :deep(.el-textarea__inner) {
@@ -316,8 +500,15 @@ function loadMore() {
   font-size: 13px;
 }
 
+.json-editor-wrapper {
+  flex: 1;
+  min-height: 200px;
+  max-height: 100%;
+  overflow: hidden;
+}
+
 .history-tab {
-  height: 100%;
+  padding: 12px 0;
 }
 
 .method-tag {

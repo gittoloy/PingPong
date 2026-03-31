@@ -32,12 +32,22 @@
         node-key="id"
         :expand-on-click-node="false"
         :default-expanded-keys="apiStore.expandedKeys"
+        draggable
+        :allow-drop="allowDrop"
+        :allow-drag="allowDrag"
         @node-click="handleNodeClick"
         @node-expand="handleNodeExpand"
         @node-collapse="handleNodeCollapse"
+        @node-drag-end="handleDragEnd"
       >
         <template #default="{ node, data }">
-          <div class="tree-node">
+          <div 
+            class="tree-node" 
+            :class="{ 
+              'is-dragging': draggingNodeId === data.id,
+              'is-selected': data.type === 'api' && apiStore.selectedApiId === (data.data as ApiItem).id
+            }"
+          >
             <div class="node-content">
               <el-icon v-if="data.type === 'group'" class="node-icon folder">
                 <Folder />
@@ -119,6 +129,8 @@
 import { ref, onMounted } from 'vue'
 import { Plus, FolderAdd, DocumentAdd, Folder, FolderOpened, Edit, Delete, MoreFilled } from '@element-plus/icons-vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
+import type Node from 'element-plus/es/components/tree/src/model/node'
+import type { DropType } from 'element-plus/es/components/tree/src/tree.type'
 import { useApiStore, type ApiGroup, type ApiItem, type TreeNode } from '@/stores/api'
 import GroupEditDialog from './GroupEditDialog.vue'
 import ApiEditDialog from './ApiEditDialog.vue'
@@ -140,6 +152,7 @@ const showApiDialog = ref(false)
 const editingGroup = ref<ApiGroup | null>(null)
 const editingApi = ref<ApiItem | null>(null)
 const selectedGroupId = ref<number | null>(null)
+const draggingNodeId = ref<number | string | null>(null)
 
 onMounted(async () => {
   await apiStore.loadAll()
@@ -271,6 +284,277 @@ const handleApiUse = (api: ApiItem) => {
   showApiDialog.value = false
   ElMessage.success('已加载API配置')
 }
+
+const allowDrag = (draggingNode: Node) => {
+  return true
+}
+
+const allowDrop = (draggingNode: Node, dropNode: Node, type: DropType) => {
+  const draggingData = draggingNode.data as TreeNode
+  const dropData = dropNode.data as TreeNode
+  
+  if (draggingData.type === 'group') {
+    if (dropData.type === 'api') {
+      return false
+    }
+    if (type === 'inner') {
+      return true
+    }
+    return true
+  } else {
+    if (type === 'inner') {
+      return dropData.type === 'group'
+    }
+    return true
+  }
+}
+
+const handleDragEnd = async (
+  draggingNode: Node,
+  dropNode: Node,
+  dropType: DropType,
+  ev: DragEvents
+) => {
+  const draggingData = draggingNode.data as TreeNode
+  const dropData = dropNode.data as TreeNode
+  
+  if (dropType === 'none') return
+  
+  if (draggingData.type === 'group') {
+    await handleGroupDragEnd(draggingNode, dropNode, dropType)
+  } else {
+    await handleApiDragEnd(draggingNode, dropNode, dropType)
+  }
+}
+
+const isDescendant = (draggingId: number, targetParentId: number | null): boolean => {
+  if (targetParentId === null) return false
+  if (draggingId === targetParentId) return true
+  
+  const targetGroup = apiStore.groups.find(g => g.id === targetParentId)
+  if (targetGroup && targetGroup.parent_id) {
+    return isDescendant(draggingId, targetGroup.parent_id)
+  }
+  return false
+}
+
+const handleGroupDragEnd = async (
+  draggingNode: Node,
+  dropNode: Node,
+  dropType: DropType
+) => {
+  const draggingData = draggingNode.data as TreeNode
+  const dropData = dropNode.data as TreeNode
+  const draggingId = Number(draggingData.id.toString().replace('group-', ''))
+  
+  let newParentId: number | null = null
+  
+  if (dropType === 'inner') {
+    newParentId = Number(dropData.id.toString().replace('group-', ''))
+  } else {
+    newParentId = dropData.parentId ?? null
+  }
+  
+  if (isDescendant(draggingId, newParentId)) {
+    ElMessage.warning('不能将分组移动到其子分组内')
+    return
+  }
+  
+  const draggingGroup = apiStore.groups.find(g => g.id === draggingId)
+  if (!draggingGroup) {
+    ElMessage.error('找不到拖拽的分组')
+    return
+  }
+  
+  const orders: { id: number; sort_order: number; parent_id: number | null }[] = []
+  
+  const groupsByParent = new Map<number | null, typeof apiStore.groups>()
+  apiStore.groups.forEach(g => {
+    const pid = g.parent_id ?? null
+    if (!groupsByParent.has(pid)) {
+      groupsByParent.set(pid, [])
+    }
+    groupsByParent.get(pid)!.push({ ...g })
+  })
+  
+  if (!groupsByParent.has(newParentId)) {
+    groupsByParent.set(newParentId, [])
+  }
+  
+  let targetList = groupsByParent.get(newParentId)!
+  
+  const oldParentId = draggingGroup.parent_id ?? null
+  if (oldParentId !== newParentId) {
+    const oldList = groupsByParent.get(oldParentId)
+    if (oldList) {
+      const idx = oldList.findIndex(g => g.id === draggingId)
+      if (idx > -1) {
+        oldList.splice(idx, 1)
+      }
+    }
+  } else {
+    const idx = targetList.findIndex(g => g.id === draggingId)
+    if (idx > -1) {
+      targetList.splice(idx, 1)
+    }
+  }
+  
+  targetList = targetList.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+  
+  let dropIndex = -1
+  if (dropType !== 'inner') {
+    const dropGroupId = Number(dropData.id.toString().replace('group-', ''))
+    dropIndex = targetList.findIndex(g => g.id === dropGroupId)
+  }
+  
+  const updatedDraggingGroup = { ...draggingGroup, parent_id: newParentId }
+  
+  if (dropType === 'inner') {
+    targetList.push(updatedDraggingGroup)
+  } else if (dropIndex > -1) {
+    const insertIndex = dropType === 'before' ? dropIndex : dropIndex + 1
+    targetList.splice(insertIndex, 0, updatedDraggingGroup)
+  } else {
+    targetList.push(updatedDraggingGroup)
+  }
+  
+  groupsByParent.forEach((groupList, parentId) => {
+    groupList.forEach((group, index) => {
+      orders.push({
+        id: group.id!,
+        sort_order: index,
+        parent_id: parentId
+      })
+    })
+  })
+  
+  if (orders.length === 0) {
+    return
+  }
+  
+  try {
+    await apiStore.reorderGroups(orders)
+    ElMessage.success('排序已保存')
+  } catch (err: any) {
+    console.error('Reorder groups error:', err)
+    ElMessage.error('保存排序失败: ' + (err.message || '未知错误'))
+    await apiStore.loadGroups()
+  }
+}
+
+const handleApiDragEnd = async (
+  draggingNode: Node,
+  dropNode: Node,
+  dropType: DropType
+) => {
+  const draggingData = draggingNode.data as TreeNode
+  const dropData = dropNode.data as TreeNode
+  const draggingId = Number(draggingData.id.toString().replace('api-', ''))
+  
+  let newGroupId: number | null = null
+  
+  if (dropType === 'inner') {
+    newGroupId = Number(dropData.id.toString().replace('group-', ''))
+  } else if (dropData.type === 'group') {
+    if (dropType === 'after') {
+      newGroupId = Number(dropData.id.toString().replace('group-', ''))
+    } else {
+      newGroupId = dropData.parentId ?? null
+    }
+  } else {
+    newGroupId = dropData.parentId ?? null
+  }
+  
+  const draggingApi = apiStore.apis.find(a => a.id === draggingId)
+  if (!draggingApi) {
+    ElMessage.error('找不到拖拽的API')
+    return
+  }
+  
+  const orders: { id: number; sort_order: number; group_id: number | null }[] = []
+  
+  const apisByGroup = new Map<number | null, typeof apiStore.apis>()
+  apiStore.apis.forEach(a => {
+    const gid = a.group_id ?? null
+    if (!apisByGroup.has(gid)) {
+      apisByGroup.set(gid, [])
+    }
+    apisByGroup.get(gid)!.push({ ...a })
+  })
+  
+  if (!apisByGroup.has(newGroupId)) {
+    apisByGroup.set(newGroupId, [])
+  }
+  
+  let targetList = apisByGroup.get(newGroupId)!
+  
+  const oldGroupId = draggingApi.group_id ?? null
+  if (oldGroupId !== newGroupId) {
+    const oldList = apisByGroup.get(oldGroupId)
+    if (oldList) {
+      const idx = oldList.findIndex(a => a.id === draggingId)
+      if (idx > -1) {
+        oldList.splice(idx, 1)
+      }
+    }
+  } else {
+    const idx = targetList.findIndex(a => a.id === draggingId)
+    if (idx > -1) {
+      targetList.splice(idx, 1)
+    }
+  }
+  
+  targetList = targetList.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+  
+  let dropIndex = -1
+  if (dropData.type === 'api' && dropType !== 'inner') {
+    const dropApiId = Number(dropData.id.toString().replace('api-', ''))
+    dropIndex = targetList.findIndex(a => a.id === dropApiId)
+  }
+  
+  const updatedDraggingApi = { ...draggingApi, group_id: newGroupId }
+  
+  if (dropType === 'inner') {
+    targetList.push(updatedDraggingApi)
+  } else if (dropIndex > -1) {
+    const insertIndex = dropType === 'before' ? dropIndex : dropIndex + 1
+    targetList.splice(insertIndex, 0, updatedDraggingApi)
+  } else {
+    targetList.push(updatedDraggingApi)
+  }
+  
+  apisByGroup.forEach((apiList, groupId) => {
+    apiList.forEach((api, index) => {
+      orders.push({
+        id: api.id!,
+        sort_order: index,
+        group_id: groupId
+      })
+    })
+  })
+  
+  if (orders.length === 0) {
+    return
+  }
+  
+  try {
+    await apiStore.reorderApis(orders)
+    ElMessage.success('排序已保存')
+  } catch (err: any) {
+    console.error('Reorder apis error:', err)
+    ElMessage.error('保存排序失败: ' + (err.message || '未知错误'))
+    await apiStore.loadApis()
+  }
+}
+
+interface DragEvents {
+  dragend: (event: DragEvent) => void
+  dragenter: (event: DragEvent) => void
+  dragleave: (event: DragEvent) => void
+  dragover: (event: DragEvent) => void
+  dragstart: (event: DragEvent) => void
+  drop: (event: DragEvent) => void
+}
 </script>
 
 <style scoped>
@@ -305,6 +589,19 @@ const handleApiUse = (api: ApiItem) => {
   align-items: center;
   justify-content: space-between;
   padding-right: 8px;
+  transition: background-color 0.2s, transform 0.2s;
+  border-radius: 4px;
+}
+
+.tree-node.is-dragging {
+  opacity: 0.5;
+  background-color: var(--el-color-primary-light-9);
+}
+
+.tree-node.is-selected {
+  background-color: var(--el-color-primary-light-8);
+  border-left: 3px solid var(--el-color-primary);
+  margin-left: -3px;
 }
 
 .node-content {
@@ -359,5 +656,28 @@ const handleApiUse = (api: ApiItem) => {
 .empty-state p {
   margin-top: 12px;
   font-size: 13px;
+}
+
+:deep(.el-tree-node__content) {
+  height: 32px;
+  padding: 0 8px;
+}
+
+:deep(.el-tree-node__content:hover) {
+  background-color: var(--el-fill-color-light);
+}
+
+:deep(.el-tree-node.is-drop-inner > .el-tree-node__content) {
+  background-color: var(--el-color-primary-light-9);
+  border: 1px dashed var(--el-color-primary);
+}
+
+:deep(.el-tree-node.is-dragging) {
+  opacity: 0.5;
+}
+
+:deep(.el-tree__drop-indicator) {
+  height: 2px;
+  background-color: var(--el-color-primary);
 }
 </style>

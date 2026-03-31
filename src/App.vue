@@ -1,3 +1,11 @@
+<!--
+ * @Author: zhanghongliang hongliang.zhang@medsci.cn
+ * @Date: 2026-03-26 14:49:07
+ * @LastEditors: zhanghongliang hongliang.zhang@medsci.cn
+ * @LastEditTime: 2026-03-31 09:39:10
+ * @FilePath: \pingpong\src\App.vue
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+-->
 <template>
   <div class="app-container">
     <aside class="sidebar">
@@ -66,6 +74,7 @@ onMounted(async () => {
 })
 
 function handleApiSelected(api: ApiItem) {
+  apiStore.setSelectedApiId(api.id || null)
   requestStore.loadApiWithHistory({
     method: api.method,
     url: api.url,

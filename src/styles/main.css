@@ -60,15 +60,17 @@ html, body, #app {
   background: #fff;
   border-bottom: 1px solid var(--border-color);
   padding: 16px;
-  max-height: 50vh;
-  overflow-y: auto;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 50vh;
 }
 
 .response-viewer {
   flex: 1;
   background: #fff;
-  overflow: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -160,7 +162,7 @@ html, body, #app {
 .response-body {
   flex: 1;
   overflow: auto;
-  padding: 16px;
+  /* padding: 16px; */
 }
 
 .response-body pre {
@@ -259,16 +261,27 @@ html, body, #app {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: #f5f7fa;
   border-radius: 4px;
 }
 
+::-webkit-scrollbar-thumb {
+  background: #c0c4cc;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
 ::-webkit-scrollbar-thumb:hover {
-  background: #a1a1a1;
+  background: #909399;
+}
+
+::-webkit-scrollbar-corner {
+  background: #f5f7fa;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c0c4cc #f5f7fa;
 }
 
 /* Empty state */

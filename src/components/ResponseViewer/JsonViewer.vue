@@ -168,6 +168,7 @@ watch(collapseLevel, () => {
   background: #fafafa;
   border-radius: 4px;
   overflow: hidden;
+  min-height: 0;
 }
 
 .json-toolbar {
@@ -213,6 +214,7 @@ watch(collapseLevel, () => {
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
   line-height: 18px;
+  min-width: 0;
 }
 
 .json-content :deep(.vjs-tree) {
