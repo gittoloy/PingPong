@@ -70,8 +70,20 @@ export const useEnvironmentStore = defineStore('environment', () => {
         activeEnvironment.value = env
         await loadVariables(id)
       }
+      // Reload to update is_active status
+      await loadEnvironments()
     } catch (err) {
       console.error('Failed to set active environment:', err)
+      throw err
+    }
+  }
+
+  async function reorderEnvironments(orders: { id: number; sort_order: number }[]) {
+    try {
+      await window.electronAPI.reorderEnvironments(orders)
+      await loadEnvironments()
+    } catch (err) {
+      console.error('Failed to reorder environments:', err)
       throw err
     }
   }
@@ -140,6 +152,7 @@ export const useEnvironmentStore = defineStore('environment', () => {
     updateEnvironment,
     deleteEnvironment,
     setActiveEnvironment,
+    reorderEnvironments,
     loadVariables,
     saveVariable,
     deleteVariable,

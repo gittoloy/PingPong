@@ -49,6 +49,7 @@ export interface ElectronAPI {
   deleteEnvironment: (id: number) => Promise<any>
   setActiveEnvironment: (id: number) => Promise<boolean>
   getActiveEnvironment: () => Promise<any>
+  reorderEnvironments: (orders: { id: number; sort_order: number }[]) => Promise<boolean>
   
   getVariables: (environmentId: number) => Promise<any[]>
   saveVariable: (variable: any) => Promise<any>
@@ -90,6 +91,7 @@ const api: ElectronAPI = {
   deleteEnvironment: (id) => ipcRenderer.invoke('env:delete', id),
   setActiveEnvironment: (id) => ipcRenderer.invoke('env:setActive', id),
   getActiveEnvironment: () => ipcRenderer.invoke('env:getActive'),
+  reorderEnvironments: (orders) => ipcRenderer.invoke('env:reorder', orders),
   
   getVariables: (environmentId) => ipcRenderer.invoke('var:list', environmentId),
   saveVariable: (variable) => ipcRenderer.invoke('var:save', variable),

@@ -81,7 +81,14 @@ export function registerDatabaseHandlers(): void {
 
   // Environment handlers
   ipcMain.handle('env:list', async () => {
-    return runQuery('SELECT * FROM environments ORDER BY created_at')
+    return runQuery('SELECT * FROM environments ORDER BY sort_order, created_at')
+  })
+
+  ipcMain.handle('env:reorder', async (_event, orders: { id: number; sort_order: number }[]) => {
+    for (const item of orders) {
+      execute('UPDATE environments SET sort_order = ? WHERE id = ?', [item.sort_order, item.id])
+    }
+    return true
   })
 
   ipcMain.handle('env:create', async (_event, name: string, host: string | null = null) => {

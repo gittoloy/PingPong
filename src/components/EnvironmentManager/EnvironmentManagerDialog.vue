@@ -4,6 +4,7 @@
     title="Environment Manager" 
     width="700px"
     destroy-on-close
+    draggable
   >
     <div class="env-manager">
       <div class="env-sidebar">
@@ -13,14 +14,22 @@
             <el-icon><Plus /></el-icon>
           </el-button>
         </div>
-        <div class="env-list">
+        <div class="env-list" ref="envListRef">
           <div 
-            v-for="env in environmentStore.environments" 
+            v-for="(env, index) in environmentStore.environments" 
             :key="env.id"
-            :class="['env-item', { active: selectedEnv?.id === env.id }]"
+            :class="['env-item', { active: selectedEnv?.id === env.id, dragging: dragIndex === index }]"
+            :draggable="true"
             @click="selectEnvironment(env)"
+            @dragstart="handleDragStart($event, index)"
+            @dragover="handleDragOver($event, index)"
+            @dragend="handleDragEnd"
+            @drop="handleDrop($event, index)"
           >
-            <span>{{ env.name }}</span>
+            <div class="env-item-left">
+              <el-icon class="drag-handle"><Rank /></el-icon>
+              <span>{{ env.name }}</span>
+            </div>
             <el-tag v-if="env.is_active" size="small" type="success">Active</el-tag>
           </div>
         </div>
@@ -65,22 +74,43 @@
                 <el-icon class="info-icon"><InfoFilled /></el-icon>
               </el-tooltip>
             </div>
-            <el-input 
-              v-model="editHost" 
-              size="small" 
-              placeholder="e.g., https://api.example.com"
-              @blur="updateEnvHost"
-              @keyup.enter="updateEnvHost"
-            >
-              <template #prepend>
-                <el-icon><Link /></el-icon>
-              </template>
-            </el-input>
+            <div class="host-input-row">
+              <el-input 
+                v-model="editHost" 
+                size="small" 
+                placeholder="e.g., https://api.example.com"
+                @keyup.enter="updateEnvHost"
+              >
+                <template #prepend>
+                  <el-icon><Link /></el-icon>
+                </template>
+              </el-input>
+              <el-button 
+                type="primary" 
+                size="small"
+                :disabled="!isHostChanged"
+                @click="updateEnvHost"
+              >
+                Save
+              </el-button>
+            </div>
           </div>
           
           <div class="variables-section">
             <div class="variables-header">
               <span>Variables</span>
+              <el-tooltip placement="top">
+                <template #content>
+                  <div class="variable-tooltip">
+                    <p><strong>Usage:</strong> Use <code v-pre>{{variableName}}</code> in URLs, headers, or body</p>
+                    <p><strong>Example:</strong></p>
+                    <p>Variable: <code>token = abc123</code></p>
+                    <p>URL: <code v-pre>/api/users?token={{token}}</code></p>
+                    <p>Result: <code>/api/users?token=abc123</code></p>
+                  </div>
+                </template>
+                <el-icon class="info-icon"><InfoFilled /></el-icon>
+              </el-tooltip>
               <el-button type="primary" text size="small" @click="addVariable">
                 <el-icon><Plus /></el-icon>
                 Add Variable
@@ -123,7 +153,7 @@
             
             <div v-if="variables.length === 0" class="empty-variables">
               <p>No variables defined. Click "Add Variable" to create one.</p>
-              <p class="hint">Use variables in your requests with <code>{{variableName}}</code></p>
+              <p class="hint">Use variables in your requests with <code v-pre>{{variableName}}</code></p>
             </div>
           </div>
         </template>
@@ -139,8 +169,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { Plus, Delete, Link, InfoFilled } from '@element-plus/icons-vue'
+import { ref, watch, computed } from 'vue'
+import { Plus, Delete, Link, InfoFilled, Rank } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useEnvironmentStore } from '@/stores/environment'
 import type { Environment, Variable } from '@/types'
@@ -158,7 +188,17 @@ const environmentStore = useEnvironmentStore()
 const selectedEnv = ref<Environment | null>(null)
 const editName = ref('')
 const editHost = ref('')
+const originalHost = ref('')
 const variables = ref<Variable[]>([])
+
+// Drag state
+const dragIndex = ref<number | null>(null)
+const dropIndex = ref<number | null>(null)
+const envListRef = ref<HTMLElement | null>(null)
+
+const isHostChanged = computed(() => {
+  return editHost.value !== originalHost.value
+})
 
 watch(() => props.visible, (val) => {
   visible.value = val
@@ -179,6 +219,7 @@ async function selectEnvironment(env: Environment) {
   selectedEnv.value = env
   editName.value = env.name
   editHost.value = env.host || ''
+  originalHost.value = env.host || ''
   variables.value = await window.electronAPI.getVariables(env.id)
 }
 
@@ -225,11 +266,62 @@ async function updateEnvHost() {
   try {
     await environmentStore.updateEnvironment(selectedEnv.value.id, editName.value, newHost)
     selectedEnv.value.host = newHost
+    originalHost.value = editHost.value
     ElMessage.success('Host updated')
   } catch (err: any) {
     ElMessage.error(err.message || 'Failed to update host')
     editHost.value = selectedEnv.value.host || ''
   }
+}
+
+// Drag handlers for environment list
+function handleDragStart(event: DragEvent, index: number) {
+  dragIndex.value = index
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', String(index))
+  }
+}
+
+function handleDragOver(event: DragEvent, index: number) {
+  event.preventDefault()
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move'
+  }
+  dropIndex.value = index
+}
+
+function handleDragEnd() {
+  dragIndex.value = null
+  dropIndex.value = null
+}
+
+async function handleDrop(event: DragEvent, targetIndex: number) {
+  event.preventDefault()
+  const sourceIndex = dragIndex.value
+  
+  if (sourceIndex === null || sourceIndex === targetIndex) {
+    handleDragEnd()
+    return
+  }
+  
+  const envList = [...environmentStore.environments]
+  const [removed] = envList.splice(sourceIndex, 1)
+  envList.splice(targetIndex, 0, removed)
+  
+  // Update sort order
+  const orders = envList.map((env, index) => ({
+    id: env.id,
+    sort_order: index
+  }))
+  
+  try {
+    await environmentStore.reorderEnvironments(orders)
+  } catch (err: any) {
+    ElMessage.error(err.message || 'Failed to reorder environments')
+  }
+  
+  handleDragEnd()
 }
 
 async function setActive() {
@@ -280,7 +372,14 @@ async function saveVariable(variable: Variable) {
   if (!variable.key) return
   
   try {
-    const result = await environmentStore.saveVariable(variable)
+    // Clone to plain object to avoid IPC serialization error
+    const plainVariable = {
+      id: variable.id,
+      environment_id: variable.environment_id,
+      key: variable.key,
+      value: variable.value
+    }
+    const result = await environmentStore.saveVariable(plainVariable)
     if (!variable.id && typeof result === 'number') {
       variable.id = result
     }
@@ -340,6 +439,7 @@ async function deleteVariable(variable: Variable) {
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid var(--border-color);
+  transition: background-color 0.2s;
 }
 
 .env-item:hover {
@@ -349,6 +449,27 @@ async function deleteVariable(variable: Variable) {
 .env-item.active {
   background: #ecf5ff;
   border-left: 3px solid var(--primary-color);
+}
+
+.env-item.dragging {
+  opacity: 0.5;
+  background: #e6f7ff;
+}
+
+.env-item-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.drag-handle {
+  cursor: grab;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
 }
 
 .env-content {
@@ -388,6 +509,15 @@ async function deleteVariable(variable: Variable) {
   font-size: 13px;
 }
 
+.host-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.host-input-row .el-input {
+  flex: 1;
+}
+
 .info-icon {
   color: var(--text-secondary);
   cursor: help;
@@ -403,6 +533,26 @@ async function deleteVariable(variable: Variable) {
   align-items: center;
   margin-bottom: 12px;
   font-weight: 600;
+}
+
+.variables-header .info-icon {
+  margin-left: 6px;
+  margin-right: auto;
+}
+
+.variable-tooltip {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.variable-tooltip p {
+  margin: 4px 0;
+}
+
+.variable-tooltip code {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 1px 4px;
+  border-radius: 3px;
 }
 
 .empty-variables {

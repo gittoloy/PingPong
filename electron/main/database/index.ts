@@ -80,6 +80,12 @@ export async function initDatabase(): Promise<void> {
     // Column already exists, ignore
   }
   
+  try {
+    db.run('ALTER TABLE environments ADD COLUMN sort_order INTEGER DEFAULT 0')
+  } catch {
+    // Column already exists, ignore
+  }
+  
   db.run(`
     -- API分组表
     CREATE TABLE IF NOT EXISTS api_groups (
