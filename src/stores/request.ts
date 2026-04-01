@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { HttpMethod, BodyType, KeyValue, HttpResponse, RequestRecord } from '@/types'
+import { useEnvironmentStore } from './environment'
+import { useSettingsStore } from './settings'
 
 export interface ActualRequest {
   fullUrl: string
@@ -74,24 +76,39 @@ export const useRequestStore = defineStore('request', () => {
     error.value = null
     
     try {
-      const headersObj: Record<string, string> = {}
+      const environmentStore = useEnvironmentStore()
+      const settingsStore = useSettingsStore()
+      
+      // Apply variable replacement to all inputs
+      const processedUrl = environmentStore.getFullUrl(url.value)
+      
+      // Process headers with variable replacement, merge with default headers
+      const headersObj: Record<string, string> = { ...settingsStore.defaultHeadersObj }
       headers.value.forEach(h => {
         if (h.enabled && h.key) {
-          headersObj[h.key] = h.value
+          const processedKey = environmentStore.replaceVariables(h.key)
+          const processedValue = environmentStore.replaceVariables(h.value)
+          headersObj[processedKey] = processedValue
         }
       })
       
+      // Process query params with variable replacement
       const paramsObj: Record<string, string> = {}
       queryParams.value.forEach(p => {
         if (p.enabled && p.key) {
-          paramsObj[p.key] = p.value
+          const processedKey = environmentStore.replaceVariables(p.key)
+          const processedValue = environmentStore.replaceVariables(p.value)
+          paramsObj[processedKey] = processedValue
         }
       })
       
-      let fullUrl = url.value
+      // Process body with variable replacement
+      const processedBody = environmentStore.replaceVariables(body.value)
+      
+      let fullUrl = processedUrl
       if (Object.keys(paramsObj).length > 0) {
         const searchParams = new URLSearchParams(paramsObj)
-        fullUrl += (url.value.includes('?') ? '&' : '?') + searchParams.toString()
+        fullUrl += (processedUrl.includes('?') ? '&' : '?') + searchParams.toString()
       }
       
       actualRequest.value = {
@@ -99,23 +116,26 @@ export const useRequestStore = defineStore('request', () => {
         method: method.value,
         headers: { ...headersObj },
         queryParams: { ...paramsObj },
-        body: body.value,
+        body: processedBody,
         bodyType: bodyType.value,
         timestamp: Date.now()
       }
       
       const result = await window.electronAPI.sendRequest({
         method: method.value,
-        url: url.value,
+        url: processedUrl,
         headers: headersObj,
         queryParams: paramsObj,
-        body: body.value,
+        body: processedBody,
         bodyType: bodyType.value
       })
       
       response.value = result
       
-      await saveToHistory(result)
+      // Check if history is enabled before saving
+      if (settingsStore.enableHistory) {
+        await saveToHistory(result)
+      }
     } catch (err: any) {
       error.value = err.message || 'Request failed'
       response.value = null

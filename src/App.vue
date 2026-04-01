@@ -11,7 +11,7 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <h1 style="font-size: 18px; margin-bottom: 12px;">PingPong</h1>
-        <EnvironmentSelector @open-manager="showEnvManager = true" />
+        <EnvironmentSelector @open-manager="showSettings = true" />
       </div>
       <div class="sidebar-content">
         <ApiManager @api-selected="handleApiSelected" />
@@ -29,7 +29,7 @@
     </main>
     
     <TestRunnerDialog v-model:visible="showTestRunner" />
-    <EnvironmentManagerDialog v-model:visible="showEnvManager" />
+    <SystemSettingsDialog v-model:visible="showSettings" />
     
     <div class="fab-container">
       <el-tooltip content="Test Runner" placement="left">
@@ -47,22 +47,25 @@ import { VideoPlay } from '@element-plus/icons-vue'
 import { useRequestStore } from '@/stores/request'
 import { useEnvironmentStore } from '@/stores/environment'
 import { useApiStore } from '@/stores/api'
+import { useSettingsStore } from '@/stores/settings'
 import RequestBuilder from '@/components/RequestBuilder/index.vue'
 import ResponseViewer from '@/components/ResponseViewer/index.vue'
 import ApiManager from '@/components/ApiManager/index.vue'
 import EnvironmentSelector from '@/components/EnvironmentManager/EnvironmentSelector.vue'
-import EnvironmentManagerDialog from '@/components/EnvironmentManager/EnvironmentManagerDialog.vue'
+import SystemSettingsDialog from '@/components/EnvironmentManager/SystemSettingsDialog.vue'
 import TestRunnerDialog from '@/components/TestRunner/TestRunnerDialog.vue'
 import type { ApiItem } from '@/stores/api'
 
 const requestStore = useRequestStore()
 const environmentStore = useEnvironmentStore()
 const apiStore = useApiStore()
+const settingsStore = useSettingsStore()
 
 const showTestRunner = ref(false)
-const showEnvManager = ref(false)
+const showSettings = ref(false)
 
 onMounted(async () => {
+  await settingsStore.loadSettings()
   await environmentStore.loadEnvironments()
   await requestStore.loadHistory()
   await apiStore.loadAll()

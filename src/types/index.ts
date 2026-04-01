@@ -104,3 +104,25 @@ export interface ActualRequest {
   bodyType: string
   timestamp: number
 }
+
+// System Settings Types
+export interface SystemSettings {
+  requestTimeout: number
+  enableHistory: boolean
+  defaultHeaders: KeyValue[]
+  shortcuts: ShortcutMap
+  autoFormatResponse: boolean
+}
+
+export interface ShortcutMap {
+  sendRequest: string
+  saveApi: string
+  formatJson: string
+  [key: string]: string
+}
+
+export interface SettingItem {
+  key: string
+  value: string
+  updated_at?: string
+}

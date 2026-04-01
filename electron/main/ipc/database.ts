@@ -262,6 +262,50 @@ export function registerDatabaseHandlers(): void {
     }
     return true
   })
+
+  // Settings handlers
+  ipcMain.handle('settings:get', async (_event, key: string) => {
+    const results = runQuery('SELECT value FROM settings WHERE key = ?', [key])
+    return results[0]?.value || null
+  })
+
+  ipcMain.handle('settings:getAll', async () => {
+    const results = runQuery('SELECT key, value FROM settings')
+    const settings: Record<string, string> = {}
+    for (const row of results) {
+      settings[row.key] = row.value
+    }
+    return settings
+  })
+
+  ipcMain.handle('settings:set', async (_event, key: string, value: string) => {
+    const existing = runQuery('SELECT key FROM settings WHERE key = ?', [key])
+    if (existing.length > 0) {
+      execute('UPDATE settings SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?', [value, key])
+    } else {
+      execute('INSERT INTO settings (key, value) VALUES (?, ?)', [key, value])
+    }
+    return true
+  })
+
+  ipcMain.handle('settings:reset', async () => {
+    const defaultSettings = [
+      { key: 'request_timeout', value: '30000' },
+      { key: 'enable_history', value: 'true' },
+      { key: 'default_headers', value: '[]' },
+      { key: 'auto_format_response', value: 'true' },
+      { key: 'shortcuts', value: JSON.stringify({
+        sendRequest: 'Enter',
+        saveApi: 'Ctrl+S',
+        formatJson: 'F11'
+      })}
+    ]
+    
+    for (const setting of defaultSettings) {
+      execute('UPDATE settings SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?', [setting.value, setting.key])
+    }
+    return true
+  })
 }
 
 export interface ApiItem {

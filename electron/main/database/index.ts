@@ -117,11 +117,40 @@ export async function initDatabase(): Promise<void> {
       FOREIGN KEY (group_id) REFERENCES api_groups(id) ON DELETE SET NULL
     );
   `)
+  
+  db.run(`
+    -- 系统设置表
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `)
 
   // Insert default environment if not exists
   const defaultEnv = db.exec('SELECT id FROM environments WHERE name = "Default"')
   if (defaultEnv.length === 0 || defaultEnv[0].values.length === 0) {
     db.run('INSERT INTO environments (name, is_active) VALUES ("Default", 1)')
+  }
+  
+  // Insert default settings if not exists
+  const defaultSettings = [
+    { key: 'request_timeout', value: '30000' },
+    { key: 'enable_history', value: 'true' },
+    { key: 'default_headers', value: '[]' },
+    { key: 'auto_format_response', value: 'true' },
+    { key: 'shortcuts', value: JSON.stringify({
+      sendRequest: 'Enter',
+      saveApi: 'Ctrl+S',
+      formatJson: 'F11'
+    })}
+  ]
+  
+  for (const setting of defaultSettings) {
+    const existing = db.exec(`SELECT key FROM settings WHERE key = "${setting.key}"`)
+    if (existing.length === 0 || existing[0].values.length === 0) {
+      db.run('INSERT INTO settings (key, value) VALUES (?, ?)', [setting.key, setting.value])
+    }
   }
   
   // Save database

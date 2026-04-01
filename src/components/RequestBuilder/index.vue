@@ -207,13 +207,7 @@ async function sendRequest() {
     return
   }
   
-  const originalUrl = requestStore.url
-  const fullUrl = environmentStore.getFullUrl(requestStore.url)
-  requestStore.url = fullUrl
-  
   await requestStore.sendRequest()
-  
-  requestStore.url = originalUrl
   
   if (requestStore.error) {
     ElMessage.error(requestStore.error)

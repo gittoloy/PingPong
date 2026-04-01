@@ -74,6 +74,12 @@ export interface ElectronAPI {
   
   reorderApiGroups: (orders: { id: number; sort_order: number; parent_id: number | null }[]) => Promise<boolean>
   reorderApis: (orders: { id: number; sort_order: number; group_id: number | null }[]) => Promise<boolean>
+  
+  // Settings
+  getSetting: (key: string) => Promise<string | null>
+  getAllSettings: () => Promise<Record<string, string>>
+  setSetting: (key: string, value: string) => Promise<boolean>
+  resetSettings: () => Promise<boolean>
 }
 
 const api: ElectronAPI = {
@@ -115,7 +121,13 @@ const api: ElectronAPI = {
   deleteApi: (id) => ipcRenderer.invoke('api:delete', id),
   
   reorderApiGroups: (orders) => ipcRenderer.invoke('apiGroup:reorder', orders),
-  reorderApis: (orders) => ipcRenderer.invoke('api:reorder', orders)
+  reorderApis: (orders) => ipcRenderer.invoke('api:reorder', orders),
+  
+  // Settings
+  getSetting: (key) => ipcRenderer.invoke('settings:get', key),
+  getAllSettings: () => ipcRenderer.invoke('settings:getAll'),
+  setSetting: (key, value) => ipcRenderer.invoke('settings:set', key, value),
+  resetSettings: () => ipcRenderer.invoke('settings:reset')
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

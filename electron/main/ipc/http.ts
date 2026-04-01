@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import axios, { AxiosRequestConfig, Method } from 'axios'
 import FormData from 'form-data'
+import { runQuery } from '../database'
 
 export interface HttpRequest {
   method: string
@@ -24,6 +25,17 @@ export function registerHttpHandlers(): void {
     const startTime = Date.now()
     
     try {
+      // Get timeout setting from database
+      let timeout = 30000
+      try {
+        const timeoutSetting = runQuery("SELECT value FROM settings WHERE key = 'request_timeout'")
+        if (timeoutSetting[0]?.value) {
+          timeout = parseInt(timeoutSetting[0].value) || 30000
+        }
+      } catch {
+        // Use default timeout if database query fails
+      }
+      
       // Build URL with query params
       let url = request.url
       if (request.queryParams && Object.keys(request.queryParams).length > 0) {
@@ -36,7 +48,7 @@ export function registerHttpHandlers(): void {
         method: request.method.toLowerCase() as Method,
         url,
         headers: request.headers || {},
-        timeout: 30000,
+        timeout,
         validateStatus: () => true, // Accept all status codes
       }
 
