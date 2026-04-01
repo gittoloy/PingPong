@@ -11,7 +11,7 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <h1 style="font-size: 18px; margin-bottom: 12px;">PingPong</h1>
-        <EnvironmentSelector />
+        <EnvironmentSelector @open-manager="showEnvManager = true" />
       </div>
       <div class="sidebar-content">
         <ApiManager @api-selected="handleApiSelected" />
@@ -32,11 +32,6 @@
     <EnvironmentManagerDialog v-model:visible="showEnvManager" />
     
     <div class="fab-container">
-      <el-tooltip content="Environment Manager" placement="left">
-        <el-button circle type="primary" @click="showEnvManager = true">
-          <el-icon><Setting /></el-icon>
-        </el-button>
-      </el-tooltip>
       <el-tooltip content="Test Runner" placement="left">
         <el-button circle type="success" @click="showTestRunner = true">
           <el-icon><VideoPlay /></el-icon>
@@ -48,7 +43,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Setting, VideoPlay } from '@element-plus/icons-vue'
+import { VideoPlay } from '@element-plus/icons-vue'
 import { useRequestStore } from '@/stores/request'
 import { useEnvironmentStore } from '@/stores/environment'
 import { useApiStore } from '@/stores/api'

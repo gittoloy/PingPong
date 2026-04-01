@@ -27,14 +27,14 @@
       >
         Send
       </el-button>
-      <el-button 
+      <!-- <el-button 
         type="success" 
         @click="saveApi"
         size="large"
       >
         <el-icon><FolderAdd /></el-icon>
         Save
-      </el-button>
+      </el-button> -->
     </div>
     
     <el-tabs v-model="activeTab" class="request-tabs">
@@ -152,7 +152,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Link, Document, FolderAdd } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRequestStore } from '@/stores/request'
@@ -408,6 +408,22 @@ function extractApiName(url: string): string {
     return url.trim().substring(0, 50) || 'Untitled API'
   }
 }
+
+// Ctrl+S 快捷键保存
+function handleKeyDown(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault()
+    saveApi()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown)
+})
 </script>
 
 <style scoped>
