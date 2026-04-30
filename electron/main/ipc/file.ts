@@ -1,5 +1,6 @@
 import { ipcMain, dialog } from 'electron'
 import * as fs from 'fs'
+import * as path from 'path'
 import * as XLSX from 'xlsx'
 
 export interface TestCase {
@@ -11,6 +12,31 @@ export interface TestCase {
 }
 
 export function registerFileHandlers(): void {
+  // Select files for upload
+  ipcMain.handle('file:selectFiles', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: 'All Files', extensions: ['*'] },
+        { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp'] },
+        { name: 'Documents', extensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt'] },
+        { name: 'Archives', extensions: ['zip', 'rar', '7z', 'tar', 'gz'] },
+        { name: 'JSON', extensions: ['json'] },
+        { name: 'XML', extensions: ['xml'] }
+      ]
+    })
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return []
+    }
+
+    return result.filePaths.map((filePath: string) => ({
+      filePath,
+      fileName: path.basename(filePath),
+      fileSize: fs.existsSync(filePath) ? fs.statSync(filePath).size : 0
+    }))
+  })
+
   // Import test file (Excel or CSV)
   ipcMain.handle('file:import', async () => {
     const result = await dialog.showOpenDialog({

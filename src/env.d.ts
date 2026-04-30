@@ -35,10 +35,16 @@ interface Window {
     getApis: () => Promise<any[]>
     getApisByGroup: (groupId: number | null) => Promise<any[]>
     getApi: (id: number) => Promise<any>
+    getApiByUuid: (uuid: string) => Promise<any>
     createApi: (api: any) => Promise<number>
     updateApi: (api: any) => Promise<boolean>
     deleteApi: (id: number) => Promise<boolean>
     reorderApiGroups: (orders: { id: number; sort_order: number; parent_id: number | null }[]) => Promise<boolean>
     reorderApis: (orders: { id: number; sort_order: number; group_id: number | null }[]) => Promise<boolean>
+    getSetting: (key: string) => Promise<string | null>
+    getAllSettings: () => Promise<Record<string, string>>
+    setSetting: (key: string, value: string) => Promise<boolean>
+    resetSettings: () => Promise<boolean>
+    selectFiles: () => Promise<{ filePath: string; fileName: string; fileSize: number }[]>
   }
 }

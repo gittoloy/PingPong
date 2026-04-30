@@ -11,6 +11,7 @@ export interface ApiGroup {
 
 export interface ApiItem {
   id?: number
+  uuid?: string
   group_id?: number | null
   name: string
   method: string
@@ -41,6 +42,7 @@ export const useApiStore = defineStore('api', () => {
   const expandedKeys = ref<(number | string)[]>([])
   const selectedNode = ref<TreeNode | null>(null)
   const selectedApiId = ref<number | null>(null)
+  const selectedApiUuid = ref<string | null>(null)
 
   const treeData = computed(() => {
     const buildTree = (parentId: number | null = null): TreeNode[] => {
@@ -144,6 +146,15 @@ export const useApiStore = defineStore('api', () => {
     }
   }
 
+  async function getApiByUuid(uuid: string) {
+    try {
+      return await window.electronAPI.getApiByUuid(uuid)
+    } catch (err) {
+      console.error('Failed to get api by uuid:', err)
+      return null
+    }
+  }
+
   async function updateApi(api: ApiItem) {
     try {
       await window.electronAPI.updateApi(api)
@@ -201,6 +212,20 @@ export const useApiStore = defineStore('api', () => {
     selectedApiId.value = id
   }
 
+  function setSelectedApiUuid(uuid: string | null) {
+    selectedApiUuid.value = uuid
+  }
+
+  function getSelectedApi(): ApiItem | undefined {
+    if (selectedApiUuid.value) {
+      return apis.value.find(api => api.uuid === selectedApiUuid.value)
+    }
+    if (selectedApiId.value) {
+      return apis.value.find(api => api.id === selectedApiId.value)
+    }
+    return undefined
+  }
+
   function findApiByUrl(url: string): ApiItem | null {
     return apis.value.find(api => api.url === url) || null
   }
@@ -213,6 +238,7 @@ export const useApiStore = defineStore('api', () => {
     expandedKeys,
     selectedNode,
     selectedApiId,
+    selectedApiUuid,
     loadGroups,
     loadApis,
     loadAll,
@@ -227,6 +253,8 @@ export const useApiStore = defineStore('api', () => {
     toggleExpand,
     selectNode,
     setSelectedApiId,
-    findApiByUrl
+    setSelectedApiUuid,
+    getSelectedApi,
+    getApiByUuid
   }
 })

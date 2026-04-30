@@ -73,13 +73,15 @@ onMounted(async () => {
 
 function handleApiSelected(api: ApiItem) {
   apiStore.setSelectedApiId(api.id || null)
+  apiStore.setSelectedApiUuid(api.uuid || null)
   requestStore.loadApiWithHistory({
     method: api.method,
     url: api.url,
     headers: api.headers,
     query_params: api.query_params,
     body: api.body,
-    body_type: api.body_type
+    body_type: api.body_type,
+    uuid: api.uuid
   })
 }
 </script>

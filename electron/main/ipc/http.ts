@@ -1,7 +1,15 @@
 import { ipcMain } from 'electron'
 import axios, { AxiosRequestConfig, Method } from 'axios'
 import FormData from 'form-data'
+import * as fs from 'fs'
+import * as path from 'path'
 import { runQuery } from '../database'
+
+export interface FileEntry {
+  key: string
+  filePath: string
+  fileName?: string
+}
 
 export interface HttpRequest {
   method: string
@@ -9,7 +17,9 @@ export interface HttpRequest {
   headers?: Record<string, string>
   queryParams?: Record<string, string>
   body?: string
-  bodyType?: 'json' | 'form-data' | 'raw' | 'none'
+  bodyType?: 'json' | 'form-data' | 'raw' | 'none' | 'multipart'
+  files?: FileEntry[]
+  formFields?: { key: string; value: string }[]
 }
 
 export interface HttpResponse {
@@ -53,23 +63,55 @@ export function registerHttpHandlers(): void {
       }
 
       // Handle body based on type
-      if (request.body && request.bodyType && request.bodyType !== 'none') {
+      if (request.bodyType === 'multipart' || request.bodyType === 'form-data') {
+        const form = new FormData()
+
+        // Add text fields
+        if (request.formFields && request.formFields.length > 0) {
+          for (const field of request.formFields) {
+            if (field.key) {
+              form.append(field.key, field.value)
+            }
+          }
+        }
+
+        // Add file fields
+        if (request.files && request.files.length > 0) {
+          for (const file of request.files) {
+            if (file.key && file.filePath && fs.existsSync(file.filePath)) {
+              const fileName = file.fileName || path.basename(file.filePath)
+              const fileStream = fs.createReadStream(file.filePath)
+              form.append(file.key, fileStream, { filename: fileName })
+            }
+          }
+        }
+
+        // If no form fields or files but body is provided, fall back to JSON parsing
+        if ((!request.formFields || request.formFields.length === 0) && 
+            (!request.files || request.files.length === 0) && request.body) {
+          try {
+            const formData = JSON.parse(request.body)
+            for (const [key, value] of Object.entries(formData)) {
+              form.append(key, String(value))
+            }
+          } catch {
+            form.append('data', request.body)
+          }
+        }
+
+        config.data = form
+        // Let FormData set the correct Content-Type with boundary
+        const formHeaders = form.getHeaders()
+        config.headers = {
+          ...config.headers,
+          ...formHeaders
+        }
+      } else if (request.body && request.bodyType && request.bodyType !== 'none') {
         if (request.bodyType === 'json') {
           config.data = request.body
           config.headers = {
             ...config.headers,
             'Content-Type': 'application/json'
-          }
-        } else if (request.bodyType === 'form-data') {
-          try {
-            const formData = JSON.parse(request.body)
-            const form = new FormData()
-            for (const [key, value] of Object.entries(formData)) {
-              form.append(key, String(value))
-            }
-            config.data = form
-          } catch {
-            config.data = request.body
           }
         } else {
           config.data = request.body

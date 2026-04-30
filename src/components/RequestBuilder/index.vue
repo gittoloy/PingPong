@@ -65,12 +65,23 @@
               <el-radio-button label="none">None</el-radio-button>
               <el-radio-button label="json">JSON</el-radio-button>
               <el-radio-button label="form-data">Form Data</el-radio-button>
+              <el-radio-button label="multipart">Multipart</el-radio-button>
               <el-radio-button label="raw">Raw</el-radio-button>
             </el-radio-group>
           </div>
           <div v-if="requestStore.bodyType !== 'none'" class="body-editor">
+            <FormDataEditor
+              v-if="requestStore.bodyType === 'multipart'"
+              v-model="requestStore.formData"
+              @add-text="requestStore.addFormField"
+              @add-file="requestStore.addFileField"
+              @remove="requestStore.removeFormField"
+              @select-file="handleSelectFile"
+              @clear-file="handleClearFile"
+              @change-type="handleFieldTypeChange"
+            />
             <JsonEditor
-              v-if="requestStore.bodyType === 'json'"
+              v-else-if="requestStore.bodyType === 'json'"
               v-model="requestStore.body"
               :placeholder="bodyPlaceholder"
             />
@@ -162,7 +173,8 @@ import KeyValueEditor from './KeyValueEditor.vue'
 import HeaderEditor from './HeaderEditor.vue'
 import RequestDetailDialog from './RequestDetailDialog.vue'
 import JsonEditor from './JsonEditor.vue'
-import type { HttpMethod, RequestRecord } from '@/types'
+import FormDataEditor from './FormDataEditor.vue'
+import type { HttpMethod, RequestRecord, FormField } from '@/types'
 
 const requestStore = useRequestStore()
 const environmentStore = useEnvironmentStore()
@@ -179,6 +191,8 @@ const bodyPlaceholder = computed(() => {
       return '{\n  "key": "value"\n}'
     case 'form-data':
       return '{\n  "field1": "value1",\n  "field2": "value2"\n}'
+    case 'multipart':
+      return ''
     case 'raw':
       return 'Enter raw text...'
     default:
@@ -264,19 +278,49 @@ function loadMore() {
   requestStore.loadMoreHistory()
 }
 
-function normalizeUrl(url: string): string {
-  if (!url) return ''
-  let normalized = url.trim()
-  if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
-    normalized = normalized.startsWith('/') ? normalized : '/' + normalized
+async function handleSelectFile(index: number) {
+  try {
+    const files = await window.electronAPI.selectFiles()
+    if (files && files.length > 0) {
+      const file = files[0]
+      requestStore.updateFormField(index, {
+        type: 'file',
+        filePath: file.filePath,
+        fileName: file.fileName,
+        fileSize: file.fileSize
+      })
+    }
+  } catch (err) {
+    console.error('Failed to select file:', err)
   }
-  return normalized
 }
 
-function urlsMatch(url1: string, url2: string): boolean {
-  const norm1 = normalizeUrl(url1)
-  const norm2 = normalizeUrl(url2)
-  return norm1 === norm2
+function handleClearFile(index: number) {
+  requestStore.updateFormField(index, {
+    type: 'file',
+    filePath: '',
+    fileName: '',
+    fileSize: 0
+  })
+}
+
+function handleFieldTypeChange(index: number, type: 'text' | 'file') {
+  if (type === 'file') {
+    requestStore.updateFormField(index, {
+      type: 'file',
+      value: '',
+      filePath: '',
+      fileName: '',
+      fileSize: 0
+    })
+  } else {
+    requestStore.updateFormField(index, {
+      type: 'text',
+      filePath: undefined,
+      fileName: undefined,
+      fileSize: undefined
+    })
+  }
 }
 
 function validateApiData(data: ApiItem): { valid: boolean; message: string } {
@@ -328,10 +372,22 @@ async function saveApi() {
   }
   
   const currentUrl = requestStore.url.trim()
-  const selectedApi = apiStore.apis.find(api => api.id === apiStore.selectedApiId)
+  const selectedApi = apiStore.getSelectedApi()
   
-  const filteredHeaders = requestStore.headers.filter(h => h.key && h.key.trim() !== '')
-  const filteredParams = requestStore.queryParams.filter(p => p.key && p.key.trim() !== '')
+  const filteredHeaders = requestStore.headers.filter((h: any) => h.key && h.key.trim() !== '')
+  const filteredParams = requestStore.queryParams.filter((p: any) => p.key && p.key.trim() !== '')
+  
+  // Serialize form data for multipart body type
+  let bodyValue = requestStore.body
+  if (requestStore.bodyType === 'multipart') {
+    const textFields: Record<string, string> = {}
+    requestStore.formData.forEach((f: any) => {
+      if (f.type === 'text' && f.enabled && f.key) {
+        textFields[f.key] = f.value
+      }
+    })
+    bodyValue = Object.keys(textFields).length > 0 ? JSON.stringify(textFields) : ''
+  }
   
   const apiData: ApiItem = {
     name: '',
@@ -339,7 +395,7 @@ async function saveApi() {
     url: currentUrl,
     headers: JSON.stringify(filteredHeaders),
     query_params: JSON.stringify(filteredParams),
-    body: requestStore.body,
+    body: bodyValue,
     body_type: requestStore.bodyType,
     group_id: null
   }
@@ -356,13 +412,13 @@ async function saveApi() {
     return
   }
   
-  const shouldUpdate = selectedApi && urlsMatch(selectedApi.url, currentUrl)
-  
-  if (shouldUpdate) {
+  // Use UUID to determine if we should update an existing API
+  if (selectedApi && selectedApi.id) {
     try {
-      apiData.id = selectedApi!.id
-      apiData.group_id = selectedApi!.group_id
-      apiData.description = selectedApi!.description
+      apiData.id = selectedApi.id
+      apiData.uuid = selectedApi.uuid
+      apiData.group_id = selectedApi.group_id
+      apiData.description = selectedApi.description
       await apiStore.updateApi(apiData)
       ElMessage.success('API配置已更新')
     } catch (err: any) {
@@ -373,7 +429,7 @@ async function saveApi() {
     try {
       const newApiId = await apiStore.createApi(apiData)
       apiStore.setSelectedApiId(newApiId)
-      ElMessage.success('已保存为新的临时API')
+      ElMessage.success('已保存为新的API')
     } catch (err: any) {
       console.error('Create API error:', err)
       ElMessage.error('保存失败: ' + (err.message || '未知错误'))

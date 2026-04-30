@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { runQuery, execute, saveDatabase } from '../database'
+import { randomUUID } from 'crypto'
 
 export interface RequestRecord {
   id?: number
@@ -14,6 +15,8 @@ export interface RequestRecord {
   response_time?: number
   response_headers?: string
   response_body?: string
+  api_uuid?: string
+  files?: string
   created_at?: string
 }
 
@@ -51,8 +54,8 @@ export function registerDatabaseHandlers(): void {
   ipcMain.handle('db:request:save', async (_event, request: RequestRecord) => {
     return execute(
       `INSERT INTO requests (name, method, url, headers, query_params, body, body_type, 
-        response_status, response_time, response_headers, response_body)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        response_status, response_time, response_headers, response_body, api_uuid, files)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         request.name || null,
         request.method,
@@ -64,7 +67,9 @@ export function registerDatabaseHandlers(): void {
         request.response_status || null,
         request.response_time || null,
         request.response_headers || null,
-        request.response_body || null
+        request.response_body || null,
+        request.api_uuid || null,
+        request.files || null
       ]
     )
   })
@@ -207,10 +212,12 @@ export function registerDatabaseHandlers(): void {
   ipcMain.handle('api:create', async (_event, api: ApiItem) => {
     const maxOrder = runQuery('SELECT MAX(sort_order) as max_order FROM apis WHERE group_id IS ?', [api.group_id])
     const sortOrder = (maxOrder[0]?.max_order || 0) + 1
+    const uuid = api.uuid || randomUUID()
     return execute(
-      `INSERT INTO apis (group_id, name, method, url, headers, query_params, body, body_type, description, sort_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO apis (uuid, group_id, name, method, url, headers, query_params, body, body_type, description, sort_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        uuid,
         api.group_id,
         api.name,
         api.method || 'GET',
@@ -242,6 +249,11 @@ export function registerDatabaseHandlers(): void {
       ]
     )
     return true
+  })
+
+  ipcMain.handle('api:getByUuid', async (_event, uuid: string) => {
+    const results = runQuery('SELECT * FROM apis WHERE uuid = ?', [uuid])
+    return results[0] || null
   })
 
   ipcMain.handle('api:delete', async (_event, id: number) => {
@@ -310,6 +322,7 @@ export function registerDatabaseHandlers(): void {
 
 export interface ApiItem {
   id?: number
+  uuid?: string
   group_id?: number | null
   name: string
   method: string

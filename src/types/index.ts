@@ -1,11 +1,21 @@
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD'
 
-export type BodyType = 'none' | 'json' | 'form-data' | 'raw'
+export type BodyType = 'none' | 'json' | 'form-data' | 'raw' | 'multipart'
 
 export interface KeyValue {
   key: string
   value: string
   enabled: boolean
+}
+
+export interface FormField {
+  key: string
+  value: string
+  type: 'text' | 'file'
+  enabled: boolean
+  fileName?: string
+  filePath?: string
+  fileSize?: number
 }
 
 export interface HttpRequest {
@@ -15,6 +25,8 @@ export interface HttpRequest {
   queryParams: KeyValue[]
   body: string
   bodyType: BodyType
+  files?: { key: string; filePath: string; fileName?: string }[]
+  formFields?: { key: string; value: string }[]
 }
 
 export interface HttpResponse {
@@ -38,6 +50,8 @@ export interface RequestRecord {
   response_time?: number
   response_headers?: string
   response_body?: string
+  api_uuid?: string
+  files?: string
   created_at?: string
 }
 
@@ -81,6 +95,7 @@ export interface ApiGroup {
 
 export interface ApiItem {
   id?: number
+  uuid?: string
   group_id?: number | null
   name: string
   method: string

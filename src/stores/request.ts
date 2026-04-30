@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { HttpMethod, BodyType, KeyValue, HttpResponse, RequestRecord } from '@/types'
+import type { HttpMethod, BodyType, KeyValue, FormField, HttpResponse, RequestRecord } from '@/types'
 import { useEnvironmentStore } from './environment'
 import { useSettingsStore } from './settings'
 
@@ -12,6 +12,8 @@ export interface ActualRequest {
   body: string
   bodyType: string
   timestamp: number
+  files?: { key: string; filePath: string; fileName?: string }[]
+  formFields?: { key: string; value: string }[]
 }
 
 export const useRequestStore = defineStore('request', () => {
@@ -21,6 +23,7 @@ export const useRequestStore = defineStore('request', () => {
   const queryParams = ref<KeyValue[]>([{ key: '', value: '', enabled: true }])
   const body = ref('')
   const bodyType = ref<BodyType>('none')
+  const formData = ref<FormField[]>([{ key: '', value: '', type: 'text', enabled: true }])
   
   const response = ref<HttpResponse | null>(null)
   const loading = ref(false)
@@ -30,7 +33,7 @@ export const useRequestStore = defineStore('request', () => {
   
   const history = ref<RequestRecord[]>([])
   const searchKeyword = ref('')
-  const currentApiUrl = ref('')
+  const currentApiUuid = ref('')
   const historyPageSize = 10
   const historyPage = ref(1)
   const totalHistoryCount = ref(0)
@@ -38,12 +41,8 @@ export const useRequestStore = defineStore('request', () => {
   const filteredHistory = computed(() => {
     let result = history.value
     
-    if (currentApiUrl.value) {
-      result = result.filter(item => {
-        const normalizedItemUrl = item.url.replace(/^https?:\/\/[^\/]+/, '')
-        const normalizedCurrentUrl = currentApiUrl.value.replace(/^https?:\/\/[^\/]+/, '')
-        return normalizedItemUrl === normalizedCurrentUrl || item.url === currentApiUrl.value
-      })
+    if (currentApiUuid.value) {
+      result = result.filter(item => item.api_uuid === currentApiUuid.value)
     }
     
     if (searchKeyword.value) {
@@ -105,6 +104,27 @@ export const useRequestStore = defineStore('request', () => {
       // Process body with variable replacement
       const processedBody = environmentStore.replaceVariables(body.value)
       
+      // Build file entries and form fields for multipart/form-data
+      const fileEntries: { key: string; filePath: string; fileName?: string }[] = []
+      const formFields: { key: string; value: string }[] = []
+      
+      if (bodyType.value === 'multipart' || bodyType.value === 'form-data') {
+        for (const field of formData.value) {
+          if (!field.enabled || !field.key) continue
+          if (field.type === 'file' && field.filePath) {
+            fileEntries.push({
+              key: field.key,
+              filePath: field.filePath,
+              fileName: field.fileName
+            })
+          } else if (field.type === 'text') {
+            const processedFieldKey = environmentStore.replaceVariables(field.key)
+            const processedFieldValue = environmentStore.replaceVariables(field.value)
+            formFields.push({ key: processedFieldKey, value: processedFieldValue })
+          }
+        }
+      }
+      
       let fullUrl = processedUrl
       if (Object.keys(paramsObj).length > 0) {
         const searchParams = new URLSearchParams(paramsObj)
@@ -118,7 +138,9 @@ export const useRequestStore = defineStore('request', () => {
         queryParams: { ...paramsObj },
         body: processedBody,
         bodyType: bodyType.value,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        files: fileEntries.length > 0 ? fileEntries : undefined,
+        formFields: formFields.length > 0 ? formFields : undefined
       }
       
       const result = await window.electronAPI.sendRequest({
@@ -127,7 +149,9 @@ export const useRequestStore = defineStore('request', () => {
         headers: headersObj,
         queryParams: paramsObj,
         body: processedBody,
-        bodyType: bodyType.value
+        bodyType: bodyType.value,
+        files: fileEntries.length > 0 ? fileEntries : undefined,
+        formFields: formFields.length > 0 ? formFields : undefined
       })
       
       response.value = result
@@ -145,6 +169,11 @@ export const useRequestStore = defineStore('request', () => {
   }
   
   async function saveToHistory(resp: HttpResponse) {
+    // Build files info for history record
+    const filesInfo = formData.value
+      .filter(f => f.type === 'file' && f.enabled && f.key && f.filePath)
+      .map(f => ({ key: f.key, fileName: f.fileName || '', filePath: f.filePath }))
+    
     const record: RequestRecord = {
       method: method.value,
       url: url.value,
@@ -155,7 +184,9 @@ export const useRequestStore = defineStore('request', () => {
       response_status: resp.status,
       response_time: resp.time,
       response_headers: JSON.stringify(resp.headers),
-      response_body: resp.body
+      response_body: resp.body,
+      api_uuid: currentApiUuid.value || undefined,
+      files: filesInfo.length > 0 ? JSON.stringify(filesInfo) : undefined
     }
     
     await window.electronAPI.saveRequest(record)
@@ -205,6 +236,46 @@ export const useRequestStore = defineStore('request', () => {
     body.value = record.body || ''
     bodyType.value = (record.body_type as BodyType) || 'none'
     
+    // Restore form data if present
+    if (record.body_type === 'multipart' || record.body_type === 'form-data') {
+      if (record.files) {
+        try {
+          const filesInfo = JSON.parse(record.files)
+          const formFields: FormField[] = []
+          
+          // Add text fields from body
+          if (record.body) {
+            try {
+              const textFields = JSON.parse(record.body)
+              for (const [key, value] of Object.entries(textFields)) {
+                formFields.push({ key, value: String(value), type: 'text', enabled: true })
+              }
+            } catch {
+              // body is not JSON, ignore
+            }
+          }
+          
+          // Add file fields
+          for (const f of filesInfo) {
+            formFields.push({
+              key: f.key,
+              value: '',
+              type: 'file',
+              enabled: true,
+              fileName: f.fileName,
+              filePath: f.filePath
+            })
+          }
+          
+          formData.value = formFields.length > 0 ? formFields : [{ key: '', value: '', type: 'text', enabled: true }]
+        } catch {
+          formData.value = [{ key: '', value: '', type: 'text', enabled: true }]
+        }
+      } else {
+        formData.value = [{ key: '', value: '', type: 'text', enabled: true }]
+      }
+    }
+    
     if (record.response_status !== undefined) {
       response.value = {
         status: record.response_status,
@@ -245,13 +316,14 @@ export const useRequestStore = defineStore('request', () => {
     queryParams.value = [{ key: '', value: '', enabled: true }]
     body.value = ''
     bodyType.value = 'none'
+    formData.value = [{ key: '', value: '', type: 'text', enabled: true }]
     response.value = null
     error.value = null
     actualRequest.value = null
   }
   
-  function setCurrentApiUrl(apiUrl: string) {
-    currentApiUrl.value = apiUrl
+  function setCurrentApiUuid(uuid: string) {
+    currentApiUuid.value = uuid
     historyPage.value = 1
   }
   
@@ -263,15 +335,10 @@ export const useRequestStore = defineStore('request', () => {
     historyPage.value = 1
   }
   
-  function findLatestHistoryByUrl(apiUrl: string): RequestRecord | null {
-    if (!apiUrl) return null
+  function findLatestHistoryByUuid(apiUuid: string): RequestRecord | null {
+    if (!apiUuid) return null
     
-    const normalizedApiUrl = apiUrl.replace(/^https?:\/\/[^\/]+/, '')
-    
-    const matchingRecords = history.value.filter(item => {
-      const normalizedItemUrl = item.url.replace(/^https?:\/\/[^\/]+/, '')
-      return normalizedItemUrl === normalizedApiUrl || item.url === apiUrl
-    })
+    const matchingRecords = history.value.filter(item => item.api_uuid === apiUuid)
     
     if (matchingRecords.length === 0) return null
     
@@ -285,12 +352,17 @@ export const useRequestStore = defineStore('request', () => {
     query_params?: string
     body?: string
     body_type?: string
+    uuid?: string
   }) {
     method.value = api.method as HttpMethod
     url.value = api.url
     bodyType.value = (api.body_type as BodyType) || 'none'
     body.value = api.body || ''
-    setCurrentApiUrl(api.url)
+    
+    // Set UUID for history filtering
+    if (api.uuid) {
+      setCurrentApiUuid(api.uuid)
+    }
     
     if (api.headers) {
       try {
@@ -314,7 +386,9 @@ export const useRequestStore = defineStore('request', () => {
       queryParams.value = [{ key: '', value: '', enabled: true }]
     }
     
-    const latestHistory = findLatestHistoryByUrl(api.url)
+    // Load history by UUID
+    const apiUuid = api.uuid || ''
+    const latestHistory = findLatestHistoryByUuid(apiUuid)
     
     if (latestHistory && latestHistory.response_status !== undefined) {
       if (latestHistory.headers) {
@@ -337,6 +411,42 @@ export const useRequestStore = defineStore('request', () => {
       
       body.value = latestHistory.body || ''
       bodyType.value = (latestHistory.body_type as BodyType) || 'none'
+      
+      // Restore form data if present
+      if (latestHistory.body_type === 'multipart' || latestHistory.body_type === 'form-data') {
+        if (latestHistory.files) {
+          try {
+            const filesInfo = JSON.parse(latestHistory.files)
+            const formFields: FormField[] = []
+            
+            if (latestHistory.body) {
+              try {
+                const textFields = JSON.parse(latestHistory.body)
+                for (const [key, value] of Object.entries(textFields)) {
+                  formFields.push({ key, value: String(value), type: 'text', enabled: true })
+                }
+              } catch {
+                // body is not JSON
+              }
+            }
+            
+            for (const f of filesInfo) {
+              formFields.push({
+                key: f.key,
+                value: '',
+                type: 'file',
+                enabled: true,
+                fileName: f.fileName,
+                filePath: f.filePath
+              })
+            }
+            
+            formData.value = formFields.length > 0 ? formFields : [{ key: '', value: '', type: 'text', enabled: true }]
+          } catch {
+            formData.value = [{ key: '', value: '', type: 'text', enabled: true }]
+          }
+        }
+      }
       
       response.value = {
         status: latestHistory.response_status,
@@ -381,6 +491,34 @@ export const useRequestStore = defineStore('request', () => {
     }
   }
   
+  function addFormField() {
+    formData.value.push({ key: '', value: '', type: 'text', enabled: true })
+  }
+  
+  function removeFormField(index: number) {
+    formData.value.splice(index, 1)
+    if (formData.value.length === 0) {
+      formData.value.push({ key: '', value: '', type: 'text', enabled: true })
+    }
+  }
+  
+  function addFileField() {
+    formData.value.push({ key: '', value: '', type: 'file', enabled: true })
+  }
+  
+  function removeFileField(index: number) {
+    formData.value.splice(index, 1)
+    if (formData.value.length === 0) {
+      formData.value.push({ key: '', value: '', type: 'text', enabled: true })
+    }
+  }
+  
+  function updateFormField(index: number, field: Partial<FormField>) {
+    if (formData.value[index]) {
+      formData.value[index] = { ...formData.value[index], ...field }
+    }
+  }
+  
   function getStatusText(status: number): string {
     const statusTexts: Record<number, string> = {
       200: 'OK',
@@ -408,13 +546,14 @@ export const useRequestStore = defineStore('request', () => {
     queryParams,
     body,
     bodyType,
+    formData,
     response,
     loading,
     error,
     actualRequest,
     history,
     searchKeyword,
-    currentApiUrl,
+    currentApiUuid,
     filteredHistory,
     displayedHistory,
     hasMoreHistory,
@@ -428,11 +567,16 @@ export const useRequestStore = defineStore('request', () => {
     removeHeader,
     addQueryParam,
     removeQueryParam,
+    addFormField,
+    removeFormField,
+    addFileField,
+    removeFileField,
+    updateFormField,
     reset,
-    setCurrentApiUrl,
+    setCurrentApiUuid,
     loadMoreHistory,
     resetHistoryPage,
-    findLatestHistoryByUrl,
+    findLatestHistoryByUuid,
     loadApiWithHistory
   }
 })

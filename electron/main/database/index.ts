@@ -118,6 +118,35 @@ export async function initDatabase(): Promise<void> {
     );
   `)
   
+  try {
+    db.run('ALTER TABLE apis ADD COLUMN uuid TEXT')
+  } catch {
+    // Column already exists, ignore
+  }
+
+  // Generate UUIDs for existing APIs that don't have one
+  try {
+    const apisWithoutUuid = db.exec('SELECT id FROM apis WHERE uuid IS NULL')
+    for (const row of apisWithoutUuid[0]?.values || []) {
+      const uuid = crypto.randomUUID()
+      db.run('UPDATE apis SET uuid = ? WHERE id = ?', [uuid, row[0]])
+    }
+  } catch {
+    // Ignore errors
+  }
+
+  try {
+    db.run('ALTER TABLE requests ADD COLUMN api_uuid TEXT')
+  } catch {
+    // Column already exists, ignore
+  }
+
+  try {
+    db.run('ALTER TABLE requests ADD COLUMN files TEXT')
+  } catch {
+    // Column already exists, ignore
+  }
+
   db.run(`
     -- 系统设置表
     CREATE TABLE IF NOT EXISTS settings (

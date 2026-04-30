@@ -43,6 +43,7 @@
           <el-radio-button label="none">None</el-radio-button>
           <el-radio-button label="json">JSON</el-radio-button>
           <el-radio-button label="form-data">Form Data</el-radio-button>
+          <el-radio-button label="multipart">Multipart</el-radio-button>
           <el-radio-button label="raw">Raw</el-radio-button>
         </el-radio-group>
       </el-form-item>

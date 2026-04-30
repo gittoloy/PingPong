@@ -10,6 +10,7 @@ export interface ApiGroup {
 
 export interface ApiItem {
   id?: number
+  uuid?: string
   group_id?: number | null
   name: string
   method: string
@@ -32,6 +33,12 @@ export interface ActualRequest {
   body: string
   bodyType: string
   timestamp: number
+}
+
+export interface FileSelectResult {
+  filePath: string
+  fileName: string
+  fileSize: number
 }
 
 export interface ElectronAPI {
@@ -68,6 +75,7 @@ export interface ElectronAPI {
   getApis: () => Promise<ApiItem[]>
   getApisByGroup: (groupId: number | null) => Promise<ApiItem[]>
   getApi: (id: number) => Promise<ApiItem | null>
+  getApiByUuid: (uuid: string) => Promise<ApiItem | null>
   createApi: (api: ApiItem) => Promise<number>
   updateApi: (api: ApiItem) => Promise<boolean>
   deleteApi: (id: number) => Promise<boolean>
@@ -80,6 +88,9 @@ export interface ElectronAPI {
   getAllSettings: () => Promise<Record<string, string>>
   setSetting: (key: string, value: string) => Promise<boolean>
   resetSettings: () => Promise<boolean>
+
+  // File operations
+  selectFiles: () => Promise<FileSelectResult[]>
 }
 
 const api: ElectronAPI = {
@@ -116,6 +127,7 @@ const api: ElectronAPI = {
   getApis: () => ipcRenderer.invoke('api:list'),
   getApisByGroup: (groupId) => ipcRenderer.invoke('api:listByGroup', groupId),
   getApi: (id) => ipcRenderer.invoke('api:get', id),
+  getApiByUuid: (uuid) => ipcRenderer.invoke('api:getByUuid', uuid),
   createApi: (api) => ipcRenderer.invoke('api:create', api),
   updateApi: (api) => ipcRenderer.invoke('api:update', api),
   deleteApi: (id) => ipcRenderer.invoke('api:delete', id),
@@ -127,7 +139,10 @@ const api: ElectronAPI = {
   getSetting: (key) => ipcRenderer.invoke('settings:get', key),
   getAllSettings: () => ipcRenderer.invoke('settings:getAll'),
   setSetting: (key, value) => ipcRenderer.invoke('settings:set', key, value),
-  resetSettings: () => ipcRenderer.invoke('settings:reset')
+  resetSettings: () => ipcRenderer.invoke('settings:reset'),
+
+  // File operations
+  selectFiles: () => ipcRenderer.invoke('file:selectFiles')
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)
