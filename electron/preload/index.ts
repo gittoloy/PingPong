@@ -19,6 +19,7 @@ export interface ApiItem {
   query_params?: string
   body?: string
   body_type?: string
+  form_data?: string
   description?: string
   sort_order?: number
   created_at?: string
@@ -91,6 +92,7 @@ export interface ElectronAPI {
 
   // File operations
   selectFiles: () => Promise<FileSelectResult[]>
+  saveFileAs: (sourceFilePath: string, defaultFileName: string) => Promise<{ success: boolean; filePath?: string; message?: string }>
 }
 
 const api: ElectronAPI = {
@@ -142,7 +144,8 @@ const api: ElectronAPI = {
   resetSettings: () => ipcRenderer.invoke('settings:reset'),
 
   // File operations
-  selectFiles: () => ipcRenderer.invoke('file:selectFiles')
+  selectFiles: () => ipcRenderer.invoke('file:selectFiles'),
+  saveFileAs: (sourceFilePath: string, defaultFileName: string) => ipcRenderer.invoke('file:saveAs', sourceFilePath, defaultFileName)
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

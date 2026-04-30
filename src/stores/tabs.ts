@@ -101,6 +101,7 @@ export const useTabsStore = defineStore('tabs', () => {
     query_params?: string
     body?: string
     body_type?: string
+    form_data?: string
     uuid?: string
     name?: string
   }, tabId?: string) {
@@ -137,7 +138,18 @@ export const useTabsStore = defineStore('tabs', () => {
       tab.queryParams = [{ key: '', value: '', enabled: true }]
     }
 
-    tab.formData = [{ key: '', value: '', type: 'text', enabled: true }]
+    // Restore form data if present
+    if (api.form_data) {
+      try {
+        const parsed = JSON.parse(api.form_data)
+        tab.formData = parsed.length > 0 ? parsed : [{ key: '', value: '', type: 'text', enabled: true }]
+      } catch {
+        tab.formData = [{ key: '', value: '', type: 'text', enabled: true }]
+      }
+    } else {
+      tab.formData = [{ key: '', value: '', type: 'text', enabled: true }]
+    }
+
     tab.response = null
     tab.actualRequest = null
     tab.error = null
@@ -151,6 +163,7 @@ export const useTabsStore = defineStore('tabs', () => {
     query_params?: string
     body?: string
     body_type?: string
+    form_data?: string
     uuid?: string
     name?: string
   }) {
@@ -176,6 +189,7 @@ export const useTabsStore = defineStore('tabs', () => {
     query_params?: string
     body?: string
     body_type?: string
+    form_data?: string
     uuid?: string
     name?: string
   }, tabId: string) {

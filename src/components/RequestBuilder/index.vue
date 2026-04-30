@@ -436,6 +436,9 @@ async function saveApi() {
     query_params: JSON.stringify(filteredParams),
     body: bodyValue,
     body_type: tab.bodyType,
+    form_data: (tab.bodyType === 'multipart' || tab.bodyType === 'form-data')
+      ? JSON.stringify(tab.formData)
+      : undefined,
     group_id: null
   }
   

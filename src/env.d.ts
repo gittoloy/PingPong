@@ -46,5 +46,6 @@ interface Window {
     setSetting: (key: string, value: string) => Promise<boolean>
     resetSettings: () => Promise<boolean>
     selectFiles: () => Promise<{ filePath: string; fileName: string; fileSize: number }[]>
+    saveFileAs: (sourceFilePath: string, defaultFileName: string) => Promise<{ success: boolean; filePath?: string; message?: string }>
   }
 }

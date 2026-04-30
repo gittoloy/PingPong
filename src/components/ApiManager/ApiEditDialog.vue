@@ -2,7 +2,7 @@
   <el-dialog
     :model-value="visible"
     :title="api?.id ? '编辑API' : '新增API'"
-    width="650px"
+    width="700px"
     @update:model-value="$emit('update:visible', $event)"
     @close="handleClose"
     @keydown.enter="handleSave"
@@ -48,7 +48,19 @@
         </el-radio-group>
       </el-form-item>
       
-      <el-form-item v-if="form.body_type !== 'none'" label="请求体">
+      <el-form-item v-if="form.body_type === 'multipart' || form.body_type === 'form-data'" label="表单数据">
+        <FormDataEditor
+          v-model="formDataFields"
+          @add-text="addFormField"
+          @add-file="addFileField"
+          @remove="removeFormField"
+          @select-file="handleSelectFile"
+          @clear-file="handleClearFile"
+          @change-type="handleFieldTypeChange"
+        />
+      </el-form-item>
+      
+      <el-form-item v-else-if="form.body_type !== 'none'" label="请求体">
         <el-input
           v-model="form.body"
           type="textarea"
@@ -80,8 +92,9 @@ import { ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import KeyValueEditor from '@/components/RequestBuilder/KeyValueEditor.vue'
 import HeaderEditor from '@/components/RequestBuilder/HeaderEditor.vue'
+import FormDataEditor from '@/components/RequestBuilder/FormDataEditor.vue'
 import type { ApiItem } from '@/stores/api'
-import type { KeyValue, HttpMethod, BodyType } from '@/types'
+import type { KeyValue, HttpMethod, BodyType, FormField } from '@/types'
 
 const props = defineProps<{
   visible: boolean
@@ -112,6 +125,7 @@ const form = ref<ApiItem>({
 
 const headersData = ref<KeyValue[]>([{ key: '', value: '', enabled: true }])
 const queryParamsData = ref<KeyValue[]>([{ key: '', value: '', enabled: true }])
+const formDataFields = ref<FormField[]>([{ key: '', value: '', type: 'text', enabled: true }])
 
 const rules: FormRules = {
   name: [
@@ -148,6 +162,17 @@ watch(() => props.visible, (val) => {
           queryParamsData.value = [{ key: '', value: '', enabled: true }]
         }
       }
+      
+      if (props.api.form_data) {
+        try {
+          const parsed = JSON.parse(props.api.form_data)
+          formDataFields.value = parsed.length > 0 ? parsed : [{ key: '', value: '', type: 'text', enabled: true }]
+        } catch {
+          formDataFields.value = [{ key: '', value: '', type: 'text', enabled: true }]
+        }
+      } else {
+        formDataFields.value = [{ key: '', value: '', type: 'text', enabled: true }]
+      }
     } else {
       form.value = {
         name: '',
@@ -162,6 +187,7 @@ watch(() => props.visible, (val) => {
       }
       headersData.value = [{ key: '', value: '', enabled: true }]
       queryParamsData.value = [{ key: '', value: '', enabled: true }]
+      formDataFields.value = [{ key: '', value: '', type: 'text', enabled: true }]
     }
   }
 })
@@ -192,15 +218,92 @@ const removeQueryParam = (index: number) => {
   }
 }
 
+const addFormField = () => {
+  formDataFields.value.push({ key: '', value: '', type: 'text', enabled: true })
+}
+
+const addFileField = () => {
+  formDataFields.value.push({ key: '', value: '', type: 'file', enabled: true })
+}
+
+const removeFormField = (index: number) => {
+  formDataFields.value.splice(index, 1)
+  if (formDataFields.value.length === 0) {
+    formDataFields.value.push({ key: '', value: '', type: 'text', enabled: true })
+  }
+}
+
+async function handleSelectFile(index: number) {
+  try {
+    const files = await window.electronAPI.selectFiles()
+    if (files && files.length > 0) {
+      const file = files[0]
+      const field = formDataFields.value[index]
+      if (field) {
+        field.type = 'file'
+        field.filePath = file.filePath
+        field.fileName = file.fileName
+        field.fileSize = file.fileSize
+      }
+    }
+  } catch (err) {
+    console.error('Failed to select file:', err)
+  }
+}
+
+function handleClearFile(index: number) {
+  const field = formDataFields.value[index]
+  if (field) {
+    field.type = 'file'
+    field.value = ''
+    field.filePath = ''
+    field.fileName = ''
+    field.fileSize = 0
+  }
+}
+
+function handleFieldTypeChange(index: number, type: 'text' | 'file') {
+  const field = formDataFields.value[index]
+  if (!field) return
+  if (type === 'file') {
+    field.type = 'file'
+    field.value = ''
+    field.filePath = ''
+    field.fileName = ''
+    field.fileSize = 0
+  } else {
+    field.type = 'text'
+    field.filePath = undefined
+    field.fileName = undefined
+    field.fileSize = undefined
+  }
+}
+
 const handleSave = async () => {
   if (!formRef.value) return
   
   await formRef.value.validate((valid) => {
     if (valid) {
+      // Serialize form data for multipart body type
+      let bodyValue = form.value.body
+      if (form.value.body_type === 'multipart' || form.value.body_type === 'form-data') {
+        const textFields: Record<string, string> = {}
+        formDataFields.value.forEach((f: FormField) => {
+          if (f.type === 'text' && f.enabled && f.key) {
+            textFields[f.key] = f.value
+          }
+        })
+        bodyValue = Object.keys(textFields).length > 0 ? JSON.stringify(textFields) : ''
+      }
+      
       const api: ApiItem = {
         ...form.value,
+        body: bodyValue,
         headers: JSON.stringify(headersData.value.filter(h => h.enabled && h.key)),
-        query_params: JSON.stringify(queryParamsData.value.filter(p => p.enabled && p.key))
+        query_params: JSON.stringify(queryParamsData.value.filter(p => p.enabled && p.key)),
+        form_data: (form.value.body_type === 'multipart' || form.value.body_type === 'form-data')
+          ? JSON.stringify(formDataFields.value)
+          : undefined
       }
       emit('save', api)
     }
@@ -208,10 +311,26 @@ const handleSave = async () => {
 }
 
 const handleUse = () => {
+  // Serialize form data for multipart body type
+  let bodyValue = form.value.body
+  if (form.value.body_type === 'multipart' || form.value.body_type === 'form-data') {
+    const textFields: Record<string, string> = {}
+    formDataFields.value.forEach((f: FormField) => {
+      if (f.type === 'text' && f.enabled && f.key) {
+        textFields[f.key] = f.value
+      }
+    })
+    bodyValue = Object.keys(textFields).length > 0 ? JSON.stringify(textFields) : ''
+  }
+  
   const api: ApiItem = {
     ...form.value,
+    body: bodyValue,
     headers: JSON.stringify(headersData.value.filter(h => h.enabled && h.key)),
-    query_params: JSON.stringify(queryParamsData.value.filter(p => p.enabled && p.key))
+    query_params: JSON.stringify(queryParamsData.value.filter(p => p.enabled && p.key)),
+    form_data: (form.value.body_type === 'multipart' || form.value.body_type === 'form-data')
+      ? JSON.stringify(formDataFields.value)
+      : undefined
   }
   emit('use', api)
 }

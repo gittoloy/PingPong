@@ -285,6 +285,8 @@ const handleApiUse = (api: ApiItem) => {
   ElMessage.success('已加载API配置')
 }
 
+// Note: api-selected event emits the full ApiItem object which now includes form_data
+
 const allowDrag = (draggingNode: Node) => {
   return true
 }

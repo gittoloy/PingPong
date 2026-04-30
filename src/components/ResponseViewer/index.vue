@@ -16,7 +16,31 @@
           </el-button>
         </el-button-group>
       </div>
-      
+
+      <!-- File Download View -->
+      <template v-if="tabsStore.activeTab.response.isFileDownload">
+        <div class="file-download-panel">
+          <div class="file-download-info">
+            <el-icon :size="48" class="file-icon"><Document /></el-icon>
+            <div class="file-details">
+              <div class="file-name">{{ tabsStore.activeTab.response.fileName || 'download' }}</div>
+              <div class="file-meta">
+                <span class="file-size">{{ formatFileSize(tabsStore.activeTab.response.fileSize || 0) }}</span>
+                <span class="file-type">{{ getFileTypeLabel(tabsStore.activeTab.response.fileName || '') }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="file-download-actions">
+            <el-button type="primary" @click="saveFileAs">
+              <el-icon><FolderOpened /></el-icon>
+              另存为...
+            </el-button>
+          </div>
+        </div>
+      </template>
+
+      <!-- Normal Response View -->
+      <template v-else>
       <el-tabs v-model="activeTab" class="response-tabs">
         <el-tab-pane label="Body" name="body">
           <div class="response-body">
@@ -55,7 +79,7 @@
             </template>
           </div>
         </el-tab-pane>
-        
+
         <el-tab-pane label="Headers" name="headers">
           <div class="response-headers">
             <div class="headers-toolbar">
@@ -78,7 +102,7 @@
             </el-table>
           </div>
         </el-tab-pane>
-        
+
         <el-tab-pane label="Actual" name="actualRequest">
           <div class="actual-request-content">
             <template v-if="tabsStore.activeTab.actualRequest">
@@ -95,13 +119,13 @@
                   {{ formatTimestamp(tabsStore.activeTab.actualRequest.timestamp) }}
                 </el-descriptions-item>
               </el-descriptions>
-              
+
               <el-divider content-position="left">请求头</el-divider>
               <div class="headers-section">
-                <el-table 
-                  v-if="Object.keys(tabsStore.activeTab.actualRequest.headers).length > 0" 
-                  :data="actualHeadersList" 
-                  size="small" 
+                <el-table
+                  v-if="Object.keys(tabsStore.activeTab.actualRequest.headers).length > 0"
+                  :data="actualHeadersList"
+                  size="small"
                   stripe
                 >
                   <el-table-column prop="key" label="Key" width="200" />
@@ -109,13 +133,13 @@
                 </el-table>
                 <div v-else class="empty-text">无请求头</div>
               </div>
-              
+
               <el-divider content-position="left">查询参数</el-divider>
               <div class="params-section">
-                <el-table 
-                  v-if="Object.keys(tabsStore.activeTab.actualRequest.queryParams).length > 0" 
-                  :data="actualQueryParamsList" 
-                  size="small" 
+                <el-table
+                  v-if="Object.keys(tabsStore.activeTab.actualRequest.queryParams).length > 0"
+                  :data="actualQueryParamsList"
+                  size="small"
                   stripe
                 >
                   <el-table-column prop="key" label="Key" width="200" />
@@ -123,7 +147,7 @@
                 </el-table>
                 <div v-else class="empty-text">无查询参数</div>
               </div>
-              
+
               <el-divider content-position="left">请求体</el-divider>
               <div class="body-section">
                 <template v-if="tabsStore.activeTab.actualRequest.bodyType !== 'none' && tabsStore.activeTab.actualRequest.body">
@@ -143,15 +167,16 @@
           </div>
         </el-tab-pane>
       </el-tabs>
+      </template>
     </template>
-    
+
     <template v-else-if="tabsStore.activeTab.loading">
       <div class="empty-state">
         <el-icon class="is-loading" :size="48"><Loading /></el-icon>
         <p>Sending request...</p>
       </div>
     </template>
-    
+
     <template v-else>
       <div class="empty-state">
         <el-icon :size="48"><Promotion /></el-icon>
@@ -163,7 +188,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Timer, CopyDocument, Loading, Promotion, Document } from '@element-plus/icons-vue'
+import { Timer, CopyDocument, Loading, Promotion, Document, FolderOpened } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useTabsStore } from '@/stores/tabs'
 import JsonViewer from './JsonViewer.vue'
@@ -289,6 +314,58 @@ function formatBody(body: string, bodyType: string): string {
 
 function formatXml() {
   ElMessage.info('XML已格式化显示')
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  const k = 1024
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + units[i]
+}
+
+function getFileTypeLabel(fileName: string): string {
+  const ext = fileName.split('.').pop()?.toLowerCase() || ''
+  const typeMap: Record<string, string> = {
+    pdf: 'PDF Document',
+    doc: 'Word Document',
+    docx: 'Word Document',
+    xls: 'Excel Spreadsheet',
+    xlsx: 'Excel Spreadsheet',
+    ppt: 'PowerPoint',
+    pptx: 'PowerPoint',
+    zip: 'ZIP Archive',
+    rar: 'RAR Archive',
+    '7z': '7z Archive',
+    png: 'PNG Image',
+    jpg: 'JPEG Image',
+    jpeg: 'JPEG Image',
+    gif: 'GIF Image',
+    svg: 'SVG Image',
+    json: 'JSON File',
+    xml: 'XML File',
+    csv: 'CSV File',
+    txt: 'Text File'
+  }
+  return typeMap[ext] || 'File'
+}
+
+async function saveFileAs() {
+  const response = tabsStore.activeTab.response
+  if (!response?.filePath || !response?.fileName) {
+    ElMessage.error('没有可保存的文件')
+    return
+  }
+  try {
+    const result = await window.electronAPI.saveFileAs(response.filePath, response.fileName)
+    if (result.success) {
+      ElMessage.success(`文件已保存到: ${result.filePath}`)
+    } else if (result.message !== 'Cancelled') {
+      ElMessage.error(result.message || '保存失败')
+    }
+  } catch (err: any) {
+    ElMessage.error('保存失败: ' + (err.message || '未知错误'))
+  }
 }
 </script>
 
@@ -489,6 +566,58 @@ function formatXml() {
 
 .empty-state p {
   margin-top: 16px;
+}
+
+.file-download-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  gap: 24px;
+}
+
+.file-download-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.file-icon {
+  color: var(--el-color-primary);
+}
+
+.file-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.file-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.file-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.file-size {
+  color: var(--el-color-success);
+}
+
+.file-type {
+  color: var(--el-color-info);
+}
+
+.file-download-actions {
+  display: flex;
+  gap: 8px;
 }
 
 :deep(.el-divider__text) {

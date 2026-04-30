@@ -214,8 +214,8 @@ export function registerDatabaseHandlers(): void {
     const sortOrder = (maxOrder[0]?.max_order || 0) + 1
     const uuid = api.uuid || randomUUID()
     return execute(
-      `INSERT INTO apis (uuid, group_id, name, method, url, headers, query_params, body, body_type, description, sort_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO apis (uuid, group_id, name, method, url, headers, query_params, body, body_type, form_data, description, sort_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         uuid,
         api.group_id,
@@ -226,6 +226,7 @@ export function registerDatabaseHandlers(): void {
         api.query_params || null,
         api.body || null,
         api.body_type || 'none',
+        api.form_data || null,
         api.description || null,
         sortOrder
       ]
@@ -234,7 +235,7 @@ export function registerDatabaseHandlers(): void {
 
   ipcMain.handle('api:update', async (_event, api: ApiItem) => {
     execute(
-      `UPDATE apis SET group_id = ?, name = ?, method = ?, url = ?, headers = ?, query_params = ?, body = ?, body_type = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      `UPDATE apis SET group_id = ?, name = ?, method = ?, url = ?, headers = ?, query_params = ?, body = ?, body_type = ?, form_data = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
       [
         api.group_id,
         api.name,
@@ -244,6 +245,7 @@ export function registerDatabaseHandlers(): void {
         api.query_params || null,
         api.body || null,
         api.body_type || 'none',
+        api.form_data || null,
         api.description || null,
         api.id
       ]
@@ -331,6 +333,7 @@ export interface ApiItem {
   query_params?: string
   body?: string
   body_type?: string
+  form_data?: string
   description?: string
   sort_order?: number
   created_at?: string

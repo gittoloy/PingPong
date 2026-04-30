@@ -11,6 +11,31 @@ export interface TestCase {
   expected_status?: number
 }
 
+function getFilterName(ext: string): string {
+  const filterMap: Record<string, string> = {
+    pdf: 'PDF Files',
+    doc: 'Word Documents',
+    docx: 'Word Documents',
+    xls: 'Excel Spreadsheets',
+    xlsx: 'Excel Spreadsheets',
+    ppt: 'PowerPoint Presentations',
+    pptx: 'PowerPoint Presentations',
+    zip: 'ZIP Archives',
+    rar: 'RAR Archives',
+    '7z': '7z Archives',
+    png: 'PNG Images',
+    jpg: 'JPEG Images',
+    jpeg: 'JPEG Images',
+    gif: 'GIF Images',
+    svg: 'SVG Images',
+    json: 'JSON Files',
+    xml: 'XML Files',
+    csv: 'CSV Files',
+    txt: 'Text Files'
+  }
+  return filterMap[ext] || 'Files'
+}
+
 export function registerFileHandlers(): void {
   // Select files for upload
   ipcMain.handle('file:selectFiles', async () => {
@@ -35,6 +60,38 @@ export function registerFileHandlers(): void {
       fileName: path.basename(filePath),
       fileSize: fs.existsSync(filePath) ? fs.statSync(filePath).size : 0
     }))
+  })
+
+  // Save As dialog for file downloads
+  ipcMain.handle('file:saveAs', async (_event, sourceFilePath: string, defaultFileName: string) => {
+    if (!sourceFilePath || !fs.existsSync(sourceFilePath)) {
+      return { success: false, message: 'Source file not found' }
+    }
+
+    // Determine file extension for filter
+    const ext = path.extname(defaultFileName).replace('.', '').toLowerCase()
+    const filterName = getFilterName(ext)
+    const filters: { name: string; extensions: string[] }[] = []
+    if (ext) {
+      filters.push({ name: filterName, extensions: [ext] })
+    }
+    filters.push({ name: 'All Files', extensions: ['*'] })
+
+    const result = await dialog.showSaveDialog({
+      defaultPath: defaultFileName,
+      filters
+    })
+
+    if (result.canceled || !result.filePath) {
+      return { success: false, message: 'Cancelled' }
+    }
+
+    try {
+      fs.copyFileSync(sourceFilePath, result.filePath)
+      return { success: true, filePath: result.filePath }
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Failed to save file' }
+    }
   })
 
   // Import test file (Excel or CSV)

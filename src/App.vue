@@ -84,6 +84,7 @@ function handleApiSelected(api: ApiItem) {
     query_params: api.query_params,
     body: api.body,
     body_type: api.body_type,
+    form_data: api.form_data,
     uuid: api.uuid,
     name: api.name
   })

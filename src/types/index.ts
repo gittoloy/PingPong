@@ -35,6 +35,10 @@ export interface HttpResponse {
   headers: Record<string, string>
   body: string
   time: number
+  isFileDownload?: boolean
+  fileName?: string
+  filePath?: string
+  fileSize?: number
 }
 
 export interface RequestRecord {
@@ -104,6 +108,7 @@ export interface ApiItem {
   query_params?: string
   body?: string
   body_type?: string
+  form_data?: string
   description?: string
   sort_order?: number
   created_at?: string

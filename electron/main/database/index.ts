@@ -147,6 +147,12 @@ export async function initDatabase(): Promise<void> {
     // Column already exists, ignore
   }
 
+  try {
+    db.run('ALTER TABLE apis ADD COLUMN form_data TEXT')
+  } catch {
+    // Column already exists, ignore
+  }
+
   db.run(`
     -- 系统设置表
     CREATE TABLE IF NOT EXISTS settings (
