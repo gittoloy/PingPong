@@ -2,7 +2,7 @@
   <div class="history-panel">
     <div class="history-header">
       <el-input 
-        v-model="requestStore.searchKeyword" 
+        v-model="tabsStore.searchKeyword"
         placeholder="Search history..."
         size="small"
         clearable
@@ -16,16 +16,16 @@
         text 
         size="small" 
         @click="confirmClear"
-        :disabled="requestStore.history.length === 0"
+        :disabled="tabsStore.history.length === 0"
       >
         Clear All
       </el-button>
     </div>
     
     <div class="history-list">
-      <template v-if="requestStore.filteredHistory.length > 0">
+      <template v-if="tabsStore.filteredHistory.length > 0">
         <div 
-          v-for="item in requestStore.filteredHistory" 
+          v-for="item in tabsStore.filteredHistory"
           :key="item.id"
           class="history-item"
           @click="loadRequest(item)"
@@ -63,13 +63,13 @@
 <script setup lang="ts">
 import { Search, Delete, Document } from '@element-plus/icons-vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import { useRequestStore } from '@/stores/request'
+import { useTabsStore } from '@/stores/tabs'
 import type { RequestRecord } from '@/types'
 
-const requestStore = useRequestStore()
+const tabsStore = useTabsStore()
 
 function loadRequest(item: RequestRecord) {
-  requestStore.loadFromHistory(item)
+  tabsStore.loadFromHistoryIntoTab(item)
 }
 
 async function deleteItem(id: number | undefined) {
@@ -81,7 +81,7 @@ async function deleteItem(id: number | undefined) {
       cancelButtonText: 'Cancel',
       type: 'warning'
     })
-    await requestStore.deleteHistoryItem(id)
+    await tabsStore.deleteHistoryItem(id)
     ElMessage.success('Deleted')
   } catch {
     // Cancelled
@@ -95,7 +95,7 @@ async function confirmClear() {
       cancelButtonText: 'Cancel',
       type: 'warning'
     })
-    await requestStore.clearHistory()
+    await tabsStore.clearHistory()
     ElMessage.success('History cleared')
   } catch {
     // Cancelled

@@ -1,13 +1,13 @@
 <template>
   <div class="response-viewer-container">
-    <template v-if="requestStore.response">
+    <template v-if="tabsStore.activeTab.response">
       <div class="response-header">
         <span :class="['status-badge', statusClass]">
-          {{ requestStore.response.status }} {{ requestStore.response.statusText }}
+          {{ tabsStore.activeTab.response.status }} {{ tabsStore.activeTab.response.statusText }}
         </span>
         <span class="response-time">
           <el-icon><Timer /></el-icon>
-          {{ requestStore.response.time }}ms
+          {{ tabsStore.activeTab.response.time }}ms
         </span>
         <el-button-group style="margin-left: auto;">
           <el-button size="small" @click="copyResponse">
@@ -21,7 +21,7 @@
         <el-tab-pane label="Body" name="body">
           <div class="response-body">
             <template v-if="isJsonResponse">
-              <JsonViewer :data="requestStore.response.body" />
+              <JsonViewer :data="tabsStore.activeTab.response.body" />
             </template>
             <template v-else-if="isXmlResponse">
               <div class="xml-viewer">
@@ -49,7 +49,7 @@
                   </el-button>
                 </div>
                 <div class="plain-content">
-                  <pre>{{ requestStore.response.body }}</pre>
+                  <pre>{{ tabsStore.activeTab.response.body }}</pre>
                 </div>
               </div>
             </template>
@@ -81,25 +81,25 @@
         
         <el-tab-pane label="Actual" name="actualRequest">
           <div class="actual-request-content">
-            <template v-if="requestStore.actualRequest">
+            <template v-if="tabsStore.activeTab.actualRequest">
               <el-descriptions :column="1" border size="small">
                 <el-descriptions-item label="请求方法">
-                  <span :class="['method-tag', 'method-' + requestStore.actualRequest.method]">
-                    {{ requestStore.actualRequest.method }}
+                  <span :class="['method-tag', 'method-' + tabsStore.activeTab.actualRequest.method]">
+                    {{ tabsStore.activeTab.actualRequest.method }}
                   </span>
                 </el-descriptions-item>
                 <el-descriptions-item label="完整URL">
-                  <div class="url-display">{{ requestStore.actualRequest.fullUrl }}</div>
+                  <div class="url-display">{{ tabsStore.activeTab.actualRequest.fullUrl }}</div>
                 </el-descriptions-item>
                 <el-descriptions-item label="请求时间">
-                  {{ formatTimestamp(requestStore.actualRequest.timestamp) }}
+                  {{ formatTimestamp(tabsStore.activeTab.actualRequest.timestamp) }}
                 </el-descriptions-item>
               </el-descriptions>
               
               <el-divider content-position="left">请求头</el-divider>
               <div class="headers-section">
                 <el-table 
-                  v-if="Object.keys(requestStore.actualRequest.headers).length > 0" 
+                  v-if="Object.keys(tabsStore.activeTab.actualRequest.headers).length > 0" 
                   :data="actualHeadersList" 
                   size="small" 
                   stripe
@@ -113,7 +113,7 @@
               <el-divider content-position="left">查询参数</el-divider>
               <div class="params-section">
                 <el-table 
-                  v-if="Object.keys(requestStore.actualRequest.queryParams).length > 0" 
+                  v-if="Object.keys(tabsStore.activeTab.actualRequest.queryParams).length > 0" 
                   :data="actualQueryParamsList" 
                   size="small" 
                   stripe
@@ -126,12 +126,12 @@
               
               <el-divider content-position="left">请求体</el-divider>
               <div class="body-section">
-                <template v-if="requestStore.actualRequest.bodyType !== 'none' && requestStore.actualRequest.body">
+                <template v-if="tabsStore.activeTab.actualRequest.bodyType !== 'none' && tabsStore.activeTab.actualRequest.body">
                   <div class="body-info">
-                    <span class="body-type">类型: {{ requestStore.actualRequest.bodyType }}</span>
+                    <span class="body-type">类型: {{ tabsStore.activeTab.actualRequest.bodyType }}</span>
                   </div>
                   <div class="body-content">
-                    <pre>{{ formatBody(requestStore.actualRequest.body, requestStore.actualRequest.bodyType) }}</pre>
+                    <pre>{{ formatBody(tabsStore.activeTab.actualRequest.body, tabsStore.activeTab.actualRequest.bodyType) }}</pre>
                   </div>
                 </template>
                 <div v-else class="empty-text">无请求体</div>
@@ -145,7 +145,7 @@
       </el-tabs>
     </template>
     
-    <template v-else-if="requestStore.loading">
+    <template v-else-if="tabsStore.activeTab.loading">
       <div class="empty-state">
         <el-icon class="is-loading" :size="48"><Loading /></el-icon>
         <p>Sending request...</p>
@@ -165,7 +165,7 @@
 import { ref, computed } from 'vue'
 import { Timer, CopyDocument, Loading, Promotion, Document } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { useRequestStore } from '@/stores/request'
+import { useTabsStore } from '@/stores/tabs'
 import JsonViewer from './JsonViewer.vue'
 import hljs from 'highlight.js/lib/core'
 import xml from 'highlight.js/lib/languages/xml'
@@ -173,11 +173,11 @@ import 'highlight.js/styles/github.css'
 
 hljs.registerLanguage('xml', xml)
 
-const requestStore = useRequestStore()
+const tabsStore = useTabsStore()
 const activeTab = ref('body')
 
 const statusClass = computed(() => {
-  const status = requestStore.response?.status || 0
+  const status = tabsStore.activeTab.response?.status || 0
   if (status >= 200 && status < 300) return 'status-2xx'
   if (status >= 300 && status < 400) return 'status-3xx'
   if (status >= 400 && status < 500) return 'status-4xx'
@@ -186,7 +186,7 @@ const statusClass = computed(() => {
 })
 
 const isJsonResponse = computed(() => {
-  const body = requestStore.response?.body || ''
+  const body = tabsStore.activeTab.response?.body || ''
   if (!body) return false
   try {
     JSON.parse(body)
@@ -197,14 +197,14 @@ const isJsonResponse = computed(() => {
 })
 
 const isXmlResponse = computed(() => {
-  const body = requestStore.response?.body || ''
+  const body = tabsStore.activeTab.response?.body || ''
   if (!body) return false
   const trimmed = body.trim()
   return trimmed.startsWith('<') && !trimmed.startsWith('<!DOCTYPE html')
 })
 
 const formattedXml = computed(() => {
-  const body = requestStore.response?.body || ''
+  const body = tabsStore.activeTab.response?.body || ''
   if (!body) return ''
   try {
     const highlighted = hljs.highlight(body, { language: 'xml' })
@@ -215,24 +215,24 @@ const formattedXml = computed(() => {
 })
 
 const headersList = computed(() => {
-  if (!requestStore.response?.headers) return []
-  return Object.entries(requestStore.response.headers).map(([key, value]) => ({
+  if (!tabsStore.activeTab.response?.headers) return []
+  return Object.entries(tabsStore.activeTab.response.headers).map(([key, value]) => ({
     key,
     value
   }))
 })
 
 const actualHeadersList = computed(() => {
-  if (!requestStore.actualRequest?.headers) return []
-  return Object.entries(requestStore.actualRequest.headers).map(([key, value]) => ({
+  if (!tabsStore.activeTab.actualRequest?.headers) return []
+  return Object.entries(tabsStore.activeTab.actualRequest.headers).map(([key, value]) => ({
     key,
     value
   }))
 })
 
 const actualQueryParamsList = computed(() => {
-  if (!requestStore.actualRequest?.queryParams) return []
-  return Object.entries(requestStore.actualRequest.queryParams).map(([key, value]) => ({
+  if (!tabsStore.activeTab.actualRequest?.queryParams) return []
+  return Object.entries(tabsStore.activeTab.actualRequest.queryParams).map(([key, value]) => ({
     key,
     value
   }))
@@ -245,7 +245,7 @@ function escapeHtml(text: string): string {
 }
 
 async function copyResponse() {
-  const body = requestStore.response?.body || ''
+  const body = tabsStore.activeTab.response?.body || ''
   try {
     await navigator.clipboard.writeText(body)
     ElMessage.success('Copied to clipboard')
@@ -255,11 +255,11 @@ async function copyResponse() {
 }
 
 async function copyHeaders() {
-  if (!requestStore.response?.headers) {
+  if (!tabsStore.activeTab.response?.headers) {
     ElMessage.warning('没有响应头可复制')
     return
   }
-  const headerText = Object.entries(requestStore.response.headers)
+  const headerText = Object.entries(tabsStore.activeTab.response.headers)
     .map(([key, value]) => `${key}: ${value}`)
     .join('\n')
   try {

@@ -118,6 +118,8 @@ export interface ActualRequest {
   body: string
   bodyType: string
   timestamp: number
+  files?: { key: string; filePath: string; fileName?: string }[]
+  formFields?: { key: string; value: string }[]
 }
 
 // System Settings Types
@@ -140,4 +142,30 @@ export interface SettingItem {
   key: string
   value: string
   updated_at?: string
+}
+
+// Path parameter type (e.g., :requestId in /api/result/:requestId)
+export interface PathParam {
+  name: string
+  value: string
+}
+
+// Request tab type - each tab holds an independent request configuration
+export interface RequestTab {
+  id: string
+  name: string
+  method: HttpMethod
+  url: string
+  headers: KeyValue[]
+  queryParams: KeyValue[]
+  pathParams: PathParam[]
+  body: string
+  bodyType: BodyType
+  formData: FormField[]
+  response: HttpResponse | null
+  loading: boolean
+  error: string | null
+  actualRequest: ActualRequest | null
+  currentApiUuid: string
+  isRenaming: boolean
 }

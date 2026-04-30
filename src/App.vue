@@ -19,6 +19,7 @@
     </aside>
     
     <main class="main-content">
+      <TabBar />
       <div class="request-builder">
         <RequestBuilder />
       </div>
@@ -44,19 +45,20 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { VideoPlay } from '@element-plus/icons-vue'
-import { useRequestStore } from '@/stores/request'
+import { useTabsStore } from '@/stores/tabs'
 import { useEnvironmentStore } from '@/stores/environment'
 import { useApiStore } from '@/stores/api'
 import { useSettingsStore } from '@/stores/settings'
 import RequestBuilder from '@/components/RequestBuilder/index.vue'
 import ResponseViewer from '@/components/ResponseViewer/index.vue'
 import ApiManager from '@/components/ApiManager/index.vue'
+import TabBar from '@/components/TabBar/index.vue'
 import EnvironmentSelector from '@/components/EnvironmentManager/EnvironmentSelector.vue'
 import SystemSettingsDialog from '@/components/EnvironmentManager/SystemSettingsDialog.vue'
 import TestRunnerDialog from '@/components/TestRunner/TestRunnerDialog.vue'
 import type { ApiItem } from '@/stores/api'
 
-const requestStore = useRequestStore()
+const tabsStore = useTabsStore()
 const environmentStore = useEnvironmentStore()
 const apiStore = useApiStore()
 const settingsStore = useSettingsStore()
@@ -67,21 +69,23 @@ const showSettings = ref(false)
 onMounted(async () => {
   await settingsStore.loadSettings()
   await environmentStore.loadEnvironments()
-  await requestStore.loadHistory()
+  await tabsStore.loadHistory()
   await apiStore.loadAll()
 })
 
 function handleApiSelected(api: ApiItem) {
   apiStore.setSelectedApiId(api.id || null)
   apiStore.setSelectedApiUuid(api.uuid || null)
-  requestStore.loadApiWithHistory({
+  // Open API in a new tab (or switch to existing tab if already open)
+  tabsStore.openApiInNewTab({
     method: api.method,
     url: api.url,
     headers: api.headers,
     query_params: api.query_params,
     body: api.body,
     body_type: api.body_type,
-    uuid: api.uuid
+    uuid: api.uuid,
+    name: api.name
   })
 }
 </script>

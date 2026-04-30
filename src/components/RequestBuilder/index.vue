@@ -1,14 +1,15 @@
 <template>
   <div class="request-builder-container">
     <div class="url-bar">
-      <el-select v-model="requestStore.method" class="method-select" :class="'method-' + requestStore.method">
+      <el-select v-model="tabsStore.activeTab.method" class="method-select" :class="'method-' + tabsStore.activeTab.method">
         <el-option v-for="method in methods" :key="method" :label="method" :value="method" />
       </el-select>
       <el-input 
-        v-model="requestStore.url" 
+        v-model="tabsStore.activeTab.url" 
         class="url-input" 
         :placeholder="urlPlaceholder"
         @keyup.enter="sendRequest"
+        @input="handleUrlChange"
       >
         <template #prefix>
           <el-icon><Link /></el-icon>
@@ -21,29 +22,24 @@
       </el-input>
       <el-button 
         type="primary" 
-        :loading="requestStore.loading" 
+        :loading="tabsStore.activeTab.loading" 
         @click="sendRequest"
         size="large"
       >
         Send
       </el-button>
-      <!-- <el-button 
-        type="success" 
-        @click="saveApi"
-        size="large"
-      >
-        <el-icon><FolderAdd /></el-icon>
-        Save
-      </el-button> -->
     </div>
+
+    <!-- Path Params Editor - shown when URL contains path params -->
+    <PathParamsEditor :path-params="tabsStore.activeTab.pathParams" />
     
     <el-tabs v-model="activeTab" class="request-tabs">
       <el-tab-pane label="Params" name="params">
         <div class="tab-content">
           <KeyValueEditor 
-            v-model="requestStore.queryParams" 
-            @add="requestStore.addQueryParam"
-            @remove="requestStore.removeQueryParam"
+            v-model="tabsStore.activeTab.queryParams" 
+            @add="addQueryParam"
+            @remove="removeQueryParam"
           />
         </div>
       </el-tab-pane>
@@ -51,9 +47,9 @@
       <el-tab-pane label="Headers" name="headers">
         <div class="tab-content">
           <HeaderEditor 
-            v-model="requestStore.headers"
-            @add="requestStore.addHeader"
-            @remove="requestStore.removeHeader"
+            v-model="tabsStore.activeTab.headers"
+            @add="addHeader"
+            @remove="removeHeader"
           />
         </div>
       </el-tab-pane>
@@ -61,7 +57,7 @@
       <el-tab-pane label="Body" name="body">
         <div class="tab-content">
           <div class="body-type-selector">
-            <el-radio-group v-model="requestStore.bodyType" size="small">
+            <el-radio-group v-model="tabsStore.activeTab.bodyType" size="small">
               <el-radio-button label="none">None</el-radio-button>
               <el-radio-button label="json">JSON</el-radio-button>
               <el-radio-button label="form-data">Form Data</el-radio-button>
@@ -69,25 +65,25 @@
               <el-radio-button label="raw">Raw</el-radio-button>
             </el-radio-group>
           </div>
-          <div v-if="requestStore.bodyType !== 'none'" class="body-editor">
+          <div v-if="tabsStore.activeTab.bodyType !== 'none'" class="body-editor">
             <FormDataEditor
-              v-if="requestStore.bodyType === 'multipart'"
-              v-model="requestStore.formData"
-              @add-text="requestStore.addFormField"
-              @add-file="requestStore.addFileField"
-              @remove="requestStore.removeFormField"
+              v-if="tabsStore.activeTab.bodyType === 'multipart'"
+              v-model="tabsStore.activeTab.formData"
+              @add-text="addFormField"
+              @add-file="addFileField"
+              @remove="removeFormField"
               @select-file="handleSelectFile"
               @clear-file="handleClearFile"
               @change-type="handleFieldTypeChange"
             />
             <JsonEditor
-              v-else-if="requestStore.bodyType === 'json'"
-              v-model="requestStore.body"
+              v-else-if="tabsStore.activeTab.bodyType === 'json'"
+              v-model="tabsStore.activeTab.body"
               :placeholder="bodyPlaceholder"
             />
             <el-input
               v-else
-              v-model="requestStore.body"
+              v-model="tabsStore.activeTab.body"
               type="textarea"
               :rows="8"
               :placeholder="bodyPlaceholder"
@@ -99,7 +95,7 @@
       
       <el-tab-pane label="History" name="history">
         <div class="tab-content history-tab">
-          <el-table :data="requestStore.displayedHistory" size="small" stripe max-height="300">
+          <el-table :data="tabsStore.displayedHistory" size="small" stripe max-height="300">
             <el-table-column prop="method" label="方法" width="80">
               <template #default="{ row }">
                 <span :class="['method-tag', 'method-' + row.method]">{{ row.method }}</span>
@@ -140,12 +136,12 @@
             </el-table-column>
           </el-table>
           
-          <div v-if="requestStore.displayedHistory.length === 0" class="empty-history">
+          <div v-if="tabsStore.displayedHistory.length === 0" class="empty-history">
             <el-icon :size="32"><Document /></el-icon>
             <p>暂无历史请求记录</p>
           </div>
           
-          <div v-if="requestStore.hasMoreHistory" class="load-more">
+          <div v-if="tabsStore.hasMoreHistory" class="load-more">
             <el-button type="primary" text @click="loadMore">
               查看更多
             </el-button>
@@ -163,10 +159,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { Link, Document, FolderAdd } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useRequestStore } from '@/stores/request'
+import { useTabsStore } from '@/stores/tabs'
 import { useEnvironmentStore } from '@/stores/environment'
 import { useApiStore, type ApiItem } from '@/stores/api'
 import KeyValueEditor from './KeyValueEditor.vue'
@@ -174,9 +170,10 @@ import HeaderEditor from './HeaderEditor.vue'
 import RequestDetailDialog from './RequestDetailDialog.vue'
 import JsonEditor from './JsonEditor.vue'
 import FormDataEditor from './FormDataEditor.vue'
+import PathParamsEditor from './PathParamsEditor.vue'
 import type { HttpMethod, RequestRecord, FormField } from '@/types'
 
-const requestStore = useRequestStore()
+const tabsStore = useTabsStore()
 const environmentStore = useEnvironmentStore()
 const apiStore = useApiStore()
 
@@ -186,7 +183,7 @@ const showDetailDialog = ref(false)
 const selectedRecord = ref<RequestRecord | null>(null)
 
 const bodyPlaceholder = computed(() => {
-  switch (requestStore.bodyType) {
+  switch (tabsStore.activeTab.bodyType) {
     case 'json':
       return '{\n  "key": "value"\n}'
     case 'form-data':
@@ -202,9 +199,9 @@ const bodyPlaceholder = computed(() => {
 
 const urlPlaceholder = computed(() => {
   if (environmentStore.activeHost) {
-    return 'Enter API path (e.g., /api/users)'
+    return 'Enter API path (e.g., /api/users/:id)'
   }
-  return 'Enter request URL (e.g., https://api.example.com/users)'
+  return 'Enter request URL (e.g., https://api.example.com/users/:id)'
 })
 
 const getHostDisplay = computed(() => {
@@ -215,16 +212,20 @@ const getHostDisplay = computed(() => {
   return host
 })
 
+function handleUrlChange() {
+  tabsStore.updatePathParamsFromUrl(tabsStore.activeTabId, tabsStore.activeTab.url)
+}
+
 async function sendRequest() {
-  if (!requestStore.url) {
+  if (!tabsStore.activeTab.url) {
     ElMessage.warning('Please enter a URL')
     return
   }
   
-  await requestStore.sendRequest()
+  await tabsStore.sendRequest()
   
-  if (requestStore.error) {
-    ElMessage.error(requestStore.error)
+  if (tabsStore.activeTab.error) {
+    ElMessage.error(tabsStore.activeTab.error)
   }
 }
 
@@ -255,13 +256,13 @@ function viewDetail(record: RequestRecord) {
 }
 
 function useHistory(record: RequestRecord) {
-  requestStore.loadFromHistory(record)
+  tabsStore.loadFromHistoryIntoTab(record)
   activeTab.value = 'params'
   ElMessage.success('已加载历史请求')
 }
 
 function handleUseFromDetail(record: RequestRecord) {
-  requestStore.loadFromHistory(record)
+  tabsStore.loadFromHistoryIntoTab(record)
   activeTab.value = 'params'
   ElMessage.success('已加载历史请求')
 }
@@ -275,7 +276,44 @@ function getDisplayUrl(url: string): string {
 }
 
 function loadMore() {
-  requestStore.loadMoreHistory()
+  tabsStore.loadMoreHistory()
+}
+
+function addHeader() {
+  tabsStore.activeTab.headers.push({ key: '', value: '', enabled: true })
+}
+
+function removeHeader(index: number) {
+  tabsStore.activeTab.headers.splice(index, 1)
+  if (tabsStore.activeTab.headers.length === 0) {
+    tabsStore.activeTab.headers.push({ key: '', value: '', enabled: true })
+  }
+}
+
+function addQueryParam() {
+  tabsStore.activeTab.queryParams.push({ key: '', value: '', enabled: true })
+}
+
+function removeQueryParam(index: number) {
+  tabsStore.activeTab.queryParams.splice(index, 1)
+  if (tabsStore.activeTab.queryParams.length === 0) {
+    tabsStore.activeTab.queryParams.push({ key: '', value: '', enabled: true })
+  }
+}
+
+function addFormField() {
+  tabsStore.activeTab.formData.push({ key: '', value: '', type: 'text', enabled: true })
+}
+
+function removeFormField(index: number) {
+  tabsStore.activeTab.formData.splice(index, 1)
+  if (tabsStore.activeTab.formData.length === 0) {
+    tabsStore.activeTab.formData.push({ key: '', value: '', type: 'text', enabled: true })
+  }
+}
+
+function addFileField() {
+  tabsStore.activeTab.formData.push({ key: '', value: '', type: 'file', enabled: true })
 }
 
 async function handleSelectFile(index: number) {
@@ -283,12 +321,13 @@ async function handleSelectFile(index: number) {
     const files = await window.electronAPI.selectFiles()
     if (files && files.length > 0) {
       const file = files[0]
-      requestStore.updateFormField(index, {
-        type: 'file',
-        filePath: file.filePath,
-        fileName: file.fileName,
-        fileSize: file.fileSize
-      })
+      const field = tabsStore.activeTab.formData[index]
+      if (field) {
+        field.type = 'file'
+        field.filePath = file.filePath
+        field.fileName = file.fileName
+        field.fileSize = file.fileSize
+      }
     }
   } catch (err) {
     console.error('Failed to select file:', err)
@@ -296,30 +335,29 @@ async function handleSelectFile(index: number) {
 }
 
 function handleClearFile(index: number) {
-  requestStore.updateFormField(index, {
-    type: 'file',
-    filePath: '',
-    fileName: '',
-    fileSize: 0
-  })
+  const field = tabsStore.activeTab.formData[index]
+  if (field) {
+    field.type = 'file'
+    field.filePath = ''
+    field.fileName = ''
+    field.fileSize = 0
+  }
 }
 
 function handleFieldTypeChange(index: number, type: 'text' | 'file') {
+  const field = tabsStore.activeTab.formData[index]
+  if (!field) return
   if (type === 'file') {
-    requestStore.updateFormField(index, {
-      type: 'file',
-      value: '',
-      filePath: '',
-      fileName: '',
-      fileSize: 0
-    })
+    field.type = 'file'
+    field.value = ''
+    field.filePath = ''
+    field.fileName = ''
+    field.fileSize = 0
   } else {
-    requestStore.updateFormField(index, {
-      type: 'text',
-      filePath: undefined,
-      fileName: undefined,
-      fileSize: undefined
-    })
+    field.type = 'text'
+    field.filePath = undefined
+    field.fileName = undefined
+    field.fileSize = undefined
   }
 }
 
@@ -366,22 +404,23 @@ function validateApiData(data: ApiItem): { valid: boolean; message: string } {
 }
 
 async function saveApi() {
-  if (!requestStore.url) {
+  const tab = tabsStore.activeTab
+  if (!tab.url) {
     ElMessage.warning('请输入URL')
     return
   }
   
-  const currentUrl = requestStore.url.trim()
+  const currentUrl = tab.url.trim()
   const selectedApi = apiStore.getSelectedApi()
   
-  const filteredHeaders = requestStore.headers.filter((h: any) => h.key && h.key.trim() !== '')
-  const filteredParams = requestStore.queryParams.filter((p: any) => p.key && p.key.trim() !== '')
+  const filteredHeaders = tab.headers.filter((h: any) => h.key && h.key.trim() !== '')
+  const filteredParams = tab.queryParams.filter((p: any) => p.key && p.key.trim() !== '')
   
   // Serialize form data for multipart body type
-  let bodyValue = requestStore.body
-  if (requestStore.bodyType === 'multipart') {
+  let bodyValue = tab.body
+  if (tab.bodyType === 'multipart') {
     const textFields: Record<string, string> = {}
-    requestStore.formData.forEach((f: any) => {
+    tab.formData.forEach((f: any) => {
       if (f.type === 'text' && f.enabled && f.key) {
         textFields[f.key] = f.value
       }
@@ -391,12 +430,12 @@ async function saveApi() {
   
   const apiData: ApiItem = {
     name: '',
-    method: requestStore.method,
+    method: tab.method,
     url: currentUrl,
     headers: JSON.stringify(filteredHeaders),
     query_params: JSON.stringify(filteredParams),
     body: bodyValue,
-    body_type: requestStore.bodyType,
+    body_type: tab.bodyType,
     group_id: null
   }
   
