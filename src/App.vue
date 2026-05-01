@@ -43,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { VideoPlay } from '@element-plus/icons-vue'
 import { useTabsStore } from '@/stores/tabs'
 import { useEnvironmentStore } from '@/stores/environment'
@@ -89,6 +89,23 @@ function handleApiSelected(api: ApiItem) {
     name: api.name
   })
 }
+
+// Watch active tab changes and sync API store selection state
+// This ensures the left panel highlights the correct API when switching tabs
+watch(() => tabsStore.activeTabId, () => {
+  const tab = tabsStore.activeTab
+  if (tab?.currentApiUuid) {
+    const api = apiStore.apis.find((a: ApiItem) => a.uuid === tab.currentApiUuid)
+    if (api) {
+      apiStore.setSelectedApiId(api.id || null)
+      apiStore.setSelectedApiUuid(api.uuid || null)
+    }
+  } else {
+    // New/empty tab has no API association - clear selection
+    apiStore.setSelectedApiId(null)
+    apiStore.setSelectedApiUuid(null)
+  }
+})
 </script>
 
 <style scoped>

@@ -45,7 +45,7 @@
             class="tree-node" 
             :class="{ 
               'is-dragging': draggingNodeId === data.id,
-              'is-selected': data.type === 'api' && apiStore.selectedApiId === (data.data as ApiItem).id
+              'is-selected': data.type === 'api' && apiStore.selectedApiUuid === (data.data as ApiItem).uuid
             }"
           >
             <div class="node-content">
